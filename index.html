@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Island Quest – Szymon's Adventure</title>
+<link rel="icon" type="image/png" href="icon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Island Quest">
+<meta name="theme-color" content="#1b3058">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; background: #07101f; overflow: hidden; font-family: "Fredoka", "Segoe UI", Arial, sans-serif; color: #fff; touch-action: none; user-select: none; -webkit-user-select: none; }
+  canvas { display: block; }
+  #hud { position: fixed; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; align-items: flex-start; pointer-events: none; font-weight: 700; font-size: 16px; text-shadow: 0 2px 0 rgba(0,0,0,.6); }
+  .pill { background: rgba(0,0,0,.45); padding: 6px 12px; border-radius: 12px; backdrop-filter: blur(4px); margin: 2px; display: inline-block; }
+  .btn { pointer-events: auto; cursor: pointer; }
+  #obj { max-width: 420px; }
+  #compass { display: inline-block; width: 22px; height: 22px; vertical-align: middle; margin-right: 6px; transition: transform .1s; }
+  #prompt { position: fixed; bottom: 150px; left: 0; right: 0; text-align: center; font-weight: 700; font-size: 20px; text-shadow: 0 2px 0 #000; pointer-events: none; opacity: 0; transition: opacity .2s; }
+  #prompt.show { opacity: 1; }
+  #prompt span { background: rgba(0,0,0,.5); padding: 8px 16px; border-radius: 14px; }
+  #msg { position: fixed; top: 20%; left: 0; right: 0; text-align: center; font-weight: 700; font-size: 30px; text-shadow: 0 4px 0 rgba(0,0,0,.6); pointer-events: none; opacity: 0; transform: scale(.7); transition: all .25s; }
+  #msg.show { opacity: 1; transform: scale(1); }
+  #joy { position: fixed; width: 130px; height: 130px; border-radius: 50%; background: rgba(255,255,255,.15); border: 2px solid rgba(255,255,255,.45); display: none; pointer-events: none; }
+  #knob { position: absolute; left: 38px; top: 38px; width: 54px; height: 54px; border-radius: 50%; background: rgba(255,255,255,.7); }
+  .tbtn { position: fixed; border-radius: 50%; background: rgba(255,255,255,.2); border: 3px solid rgba(255,255,255,.55); display: none; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; text-shadow: 0 2px 0 #000; }
+  .tbtn.on { background: rgba(255,255,255,.5); }
+  #bj { right: 22px; bottom: 26px; width: 96px; height: 96px; }
+  #be { right: 130px; bottom: 40px; width: 76px; height: 76px; font-size: 26px; }
+  .touch .tbtn { display: flex; }
+  .ov { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 16px; background: rgba(5,10,30,.55); z-index: 5; }
+  .ov.hide { display: none; }
+  .card { background: linear-gradient(180deg,#1b3058,#122244); border: 4px solid #ffd43b; border-radius: 22px; padding: 22px 24px; max-width: 540px; width: 100%; box-shadow: 0 12px 0 #0a1526, 0 20px 60px rgba(0,0,0,.5); max-height: 92vh; overflow: auto; }
+  h1 { font-size: 40px; color: #ffd43b; text-shadow: 4px 4px 0 #b8860b; letter-spacing: 1px; line-height: 1; }
+  h1 small { display: block; font-size: 16px; color: #fff; text-shadow: 2px 2px 0 #000; letter-spacing: 4px; margin-top: 6px; }
+  h2 { font-size: 24px; margin-bottom: 8px; }
+  p { font-size: 15px; line-height: 1.45; margin: 8px 0 12px; color: #dbe7ff; }
+  button { font: inherit; font-weight: 700; font-size: 18px; padding: 11px 24px; border: 0; border-radius: 14px; background: #37d67a; color: #073; box-shadow: 0 5px 0 #1f8f50; cursor: pointer; margin: 4px; }
+  button:active { transform: translateY(4px); box-shadow: 0 1px 0 #1f8f50; }
+  button.y { background: #ffd43b; color: #5a3a00; box-shadow: 0 5px 0 #b8860b; }
+  button.g { background: #3a4d70; color: #fff; box-shadow: 0 5px 0 #1d2a40; }
+  button.sm { font-size: 14px; padding: 8px 14px; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .row { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; }
+  .islands { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 10px 0; }
+  .isl { flex: 1; min-width: 140px; background: rgba(0,0,0,.3); border: 3px solid rgba(255,255,255,.2); border-radius: 16px; padding: 12px 8px; cursor: pointer; }
+  .isl:hover { border-color: #ffd43b; } .isl.lock { opacity: .5; cursor: not-allowed; }
+  .isl .ico { font-size: 40px; } .isl .nm { font-weight: 700; } .isl .st { font-size: 13px; color: #9fb3d9; }
+  input { font: inherit; font-size: 22px; font-weight: 700; padding: 10px 14px; border-radius: 12px; border: 3px solid #ffd43b; background: #0a1526; color: #fff; text-align: center; width: 80%; }
+  /* dialog */
+  #dlg { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); width: min(720px, 94%); background: rgba(10,20,45,.94); border: 4px solid #ffd43b; border-radius: 20px; padding: 14px 18px; z-index: 6; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+  #dlg.hide { display: none; }
+  #dlgName { font-weight: 700; color: #ffd43b; font-size: 18px; }
+  #dlgText { font-size: 20px; line-height: 1.4; min-height: 56px; margin: 6px 0 10px; }
+  #dlgBtns { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+  /* quiz */
+  #quiz { text-align: center; }
+  #quizPic { font-size: 110px; line-height: 1.2; }
+  #quizOpts button { min-width: 150px; font-size: 22px; }
+  #quizProg { color: #9fb3d9; font-size: 14px; }
+  /* panels */
+  .panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 100%); background: rgba(10,20,45,.94); border-left: 4px solid #ffd43b; padding: 16px; overflow: auto; text-align: left; z-index: 6; }
+  .panel.hide { display: none; }
+  .q { background: rgba(255,255,255,.07); border-radius: 12px; padding: 10px 12px; margin: 8px 0; border-left: 5px solid #3a4d70; }
+  .q.active { border-left-color: #ffd43b; } .q.done { border-left-color: #37d67a; opacity: .75; }
+  .q .t { font-weight: 700; } .q .d { font-size: 13px; color: #9fb3d9; }
+  .items { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px,1fr)); gap: 8px; }
+  .it { background: rgba(255,255,255,.08); border: 3px solid rgba(255,255,255,.15); border-radius: 14px; padding: 10px 6px; text-align: center; cursor: pointer; }
+  .it.eq { border-color: #37d67a; background: rgba(55,214,122,.15); } .it.own { border-color: rgba(255,212,59,.6); }
+  .it .ic { font-size: 28px; } .it .n { font-weight: 700; font-size: 13px; } .it .pr { font-size: 12px; color: #ffd43b; }
+  .tabs { display: flex; gap: 6px; margin: 8px 0; flex-wrap: wrap; } .tabs button { font-size: 14px; padding: 7px 12px; } .tabs button.act { background: #ffd43b; color: #5a3a00; box-shadow: 0 5px 0 #b8860b; }
+  .words { display: flex; flex-wrap: wrap; gap: 6px; } .w { background: #ffd43b; color: #5a3a00; padding: 4px 10px; border-radius: 10px; font-weight: 700; }
+  #fade { position: fixed; inset: 0; background: #000; pointer-events: none; opacity: 0; transition: opacity .4s; z-index: 9; }
+  #vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,.35) 100%); }
+  .kbd { display: inline-block; background: #0a1526; border: 1px solid #4a5f8a; border-radius: 6px; padding: 1px 7px; font-size: 13px; }
+</style>
+</head>
+<body>
+<div id="vignette"></div>
+<div id="hud">
+  <div><span class="pill" id="hIsland">Sunny Island</span><br><span class="pill" id="obj"><svg id="compass" viewBox="0 0 24 24"><path d="M12 2 L18 20 L12 15 L6 20 Z" fill="#ffd43b" stroke="#000" stroke-width="1.5"/></svg><span id="objText">Talk to the villagers</span></span></div>
+  <div style="text-align:right"><span class="pill" id="hCoins">🪙 0</span><span class="pill" id="hWords">📖 0</span><span class="pill" id="hOnline" style="display:none"></span><br><span class="pill btn" id="btnQuests">📜 Quests</span><span class="pill btn" id="btnShop">🛒 Shop</span><span class="pill btn" id="btnMenu">☰</span></div>
+</div>
+<div id="prompt"><span id="promptText"></span></div>
+<div id="msg"></div>
+<div id="joy"><div id="knob"></div></div>
+<div class="tbtn" id="bj">JUMP</div>
+<div class="tbtn" id="be">✋</div>
+<div id="fade"></div>
+
+<div id="dlg" class="hide"><div id="dlgName"></div><div id="dlgText"></div><div id="dlgBtns"></div></div>
+
+<div class="ov hide" id="ovQuiz"><div class="card" id="quiz"><h2 id="quizTitle">Word Quiz</h2><div id="quizProg"></div><div id="quizPic">🍎</div><p id="quizQ">Which word is this?</p><div class="row" id="quizOpts"></div></div></div>
+
+<div class="ov" id="ovMenu"><div class="card">
+  <img src="logo.png" alt="Island Quest" style="width:100%;max-width:460px;border-radius:14px;display:block;margin:0 auto 6px">
+  <p id="menuSub">Explore islands, help villagers, learn words!</p>
+  <div class="islands" id="islands"></div>
+  <div class="row"><button class="g sm" id="btnName">👤 Player</button><button class="g sm" id="btnSound">🔊 Sound</button></div>
+  <p style="font-size:13px;color:#9fb3d9">PC: <span class="kbd">W A S D</span> move • <span class="kbd">Space</span> jump (2× double) • <span class="kbd">E</span> talk / use • mouse – camera • <span class="kbd">Q</span> quests<br>Tablet: left – joystick, right – camera, JUMP and ✋ buttons</p>
+</div></div>
+<div class="ov hide" id="ovName"><div class="card"><h2>👤 Your name</h2><p>What is your name? It will show above your character.</p><input id="inName" maxlength="14" placeholder="e.g. Szymon"><div class="row" style="margin-top:12px"><button id="btnNameOk">✅ OK</button></div></div></div>
+<div class="ov hide" id="ovPause"><div class="card"><h2>⏸ Paused</h2><div class="row"><button id="btnResume">▶ Continue</button><button class="g" id="btnQuit">🏠 Menu</button></div></div></div>
+
+<div id="pQuests" class="panel hide"><div class="row" style="justify-content:space-between;align-items:center"><h2>📜 Quests</h2><button class="g sm" id="btnQClose">✖</button></div><div id="qList"></div><h2 style="margin-top:14px">📖 My Words</h2><div class="words" id="wList"></div></div>
+<div id="pShop" class="panel hide"><div class="row" style="justify-content:space-between;align-items:center"><h2>🛒 Shop</h2><button class="g sm" id="btnSClose">✖</button></div><div id="bank" style="font-size:20px;color:#ffd43b;font-weight:700">🪙 0</div><p style="font-size:13px">Earn coins by helping villagers. Tap an item to buy or wear it.</p><div class="tabs" id="tabs"></div><div class="items" id="items"></div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.152.2/three.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="engine.js"></script>
+<script src="chars.js"></script>
+<script src="world.js"></script>
+<script src="quests.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
