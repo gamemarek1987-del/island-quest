@@ -127,7 +127,7 @@ const ISLANDS = [
     ground(0,0,140,120); ground(0,52,140,16,2,T.sand,T.sand);
     house(-16,-10,0.4,0xd9b27c,0x8b5a2b,6,5,3); house(16,-10,-0.4,0xc9a37a,0x6b4a2a,6,5,3); house(30,-14,-1.3,0x8b5a2b,0xffffff,5,4,2.8); path(0,0,5,70); path(0,0,60,5);
     lamp(5,5); lamp(-5,-5); bench(-8,8,0.5); sign(4,20,'Frosty Village',0.2); campfire(0,-2); campfire(26,-26); campfire(34,-36);
-    snowman(-40,-50); snowman(-30,-56); snowman(-48,-58); spawnItem('key', -34, -62); sign(-34,-44,'Snowmen',0);
+    snowman(-40,-50); snowman(-30,-56); snowman(-48,-58); spawnItem('key', -34, -54); sign(-34,-44,'Snowmen',0);
     for (let i=0;i<30;i++) tree(-70+R()*140, -58+R()*110, 0, 0.8+R()*0.6);
     water(-40,20,30,24); for (let i=0;i<3;i++) spawnItem('carrot', -56+R()*32, 6+R()*28);
     for (let i=0;i<6;i++) spawnItem('snowflake', -60+R()*120, -40+R()*80, 0.3);
