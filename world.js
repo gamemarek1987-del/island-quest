@@ -149,10 +149,13 @@ function buildItemMesh(it){ const g = new THREE.Group(); const k = it.kind;
   else if (k==='secret'){ const s2 = new THREE.Shape(); for (let i=0;i<10;i++){ const r = i%2?0.16:0.38; const a = i/10*Math.PI*2-Math.PI/2; i?s2.lineTo(Math.cos(a)*r,Math.sin(a)*r):s2.moveTo(Math.cos(a)*r,Math.sin(a)*r); } const m = new THREE.Mesh(new THREE.ExtrudeGeometry(s2,{depth:0.12,bevelEnabled:false}), mat(0xa855f7,{emissive:0x7c3aed,emissiveIntensity:1})); m.position.z = -0.06; g.add(m); }
   else if (k==='chicken'){ buildAnimal(g,'chicken'); g.children.forEach(c => c.position.y -= 0.45); }
   else { sphere(0.3,mat(0xffffff),0,0,0,g,10); }
-  // keep items above ground / out of walls
-  { let top = -99, blocker = null; for (const b of blocks){ if (b.ghost) continue; if (it.x > b.x-b.w/2 && it.x < b.x+b.w/2 && it.z > b.z-b.d/2 && it.z < b.z+b.d/2){ const bt = b.y+b.h/2; if (bt > top && bt <= it.y+1.5){ top = bt; } if (b.h > 2.4 && it.y < bt && it.y+0.5 > b.y-b.h/2){ blocker = b; } } }
-    if (blocker){ const side = it.x >= blocker.x ? 1 : -1; it.x = blocker.x + side*(blocker.w/2+1.2); it.z = blocker.z + (it.z >= blocker.z ? 1 : -1)*(blocker.d/2+1.2); top = -99; for (const b of blocks){ if (b.ghost) continue; if (it.x > b.x-b.w/2 && it.x < b.x+b.w/2 && it.z > b.z-b.d/2 && it.z < b.z+b.d/2){ const bt = b.y+b.h/2; if (bt > top && bt <= 1.5) top = bt; } } }
-    if (top > -99 && it.y < top+0.5) it.y = top+0.7; }
+  // keep items on a reachable surface: not inside blocks, not floating too high, not inside houses
+  { const groundTop = (x,z,yRef) => { let top = -99; for (const b of blocks){ if (b.ghost) continue; if (x > b.x-b.w/2 && x < b.x+b.w/2 && z > b.z-b.d/2 && z < b.z+b.d/2){ const bt = b.y+b.h/2; if (bt > top && bt <= yRef+2.5) top = bt; } } return top; };
+    const inside = (x,y,z) => blocks.find(b => !b.ghost && x > b.x-b.w/2 && x < b.x+b.w/2 && z > b.z-b.d/2 && z < b.z+b.d/2 && y > b.y-b.h/2+0.05 && y < b.y+b.h/2-0.05);
+    let blk = inside(it.x, it.y, it.z);
+    if (blk && blk.h > 2.4){ const side = it.x >= blk.x ? 1 : -1; it.x = blk.x + side*(blk.w/2+1.2); it.z = blk.z + (it.z >= blk.z ? 1 : -1)*(blk.d/2+1.2); it.y = 0.7; blk = inside(it.x, it.y, it.z); }
+    for (let k=0;k<6 && blk;k++){ it.y = blk.y+blk.h/2+0.7; blk = inside(it.x, it.y, it.z); }
+    const top = groundTop(it.x, it.z, it.y); if (top > -99){ const maxFloat = it.kind === 'secret' ? 4.6 : 1.6; if (it.y < top+0.5 || it.y > top+maxFloat) it.y = top+0.7; } }
   g.position.set(it.x,it.y,it.z); g.traverse(o => { if (o.isMesh) o.castShadow = true; }); world.add(g); it.g = g; it.got = false; if (!it.r) it.r = 1.4;
   if (it.kind !== 'coin' && it.kind !== 'secret' && it.label !== false){ const sp = textSprite(it.kind, '#ffffff', 0.45); sp.position.y = 0.9; sp.visible = false; g.add(sp); it.lbl = sp; }
 }
