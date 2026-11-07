@@ -47,7 +47,7 @@ function closeDialog(){ if (dialog) clearInterval(dialog.tw); dialog = null; $('
 
 // ---------- quests logic ----------
 function talkTo(n){
-  SFX.talk(); n.talkT = 2.5; n.faceT = 3;
+  SFX.talk(); n.talkT = 2.5; n.faceT = 3; gameEvent('talk', {});
   const qs = island.quests.filter(q => q.npc === n.id);
   // deliver quests targeting this npc
   const del = activeQuests().find(q => q.type === 'deliver' && q.target === n.id);
@@ -66,18 +66,20 @@ function talkTo(n){
   const idle = n.cfg.idleLines || ['Hello!']; openDialog(n.cfg.name, [idle[Math.floor(Math.random()*idle.length)]]);
 }
 function acceptQuest(q, n){ setQ(q.id, 'active'); SFX.quest(); showMsg('📜 New quest: '+q.title, 2200); openDialog(n.cfg.name, q.lines.accept, () => { if (q.type === 'hide') hideNext(q, 0); if (q.type === 'quiz') startQuiz(q); }); }
-function completeQuest(q){ setQ(q.id, 'done'); save.coins += q.reward.coins; persist(); hud(); SFX.win(); showMsg('✅ Quest complete! +'+q.reward.coins+' 🪙', 2200); learnWord(q.reward.word); emit(P.x,P.y+2,P.z,40,{colors:[0xffd43b,0x37d67a,0xffffff,0xff4d88],speed:6,g:5,life:1.5,up:1.5}); if (q.type==='hide'){ const n = npcById(q.npc); if (n){ n.g.position.set(n.home.x,0,n.home.z); n.x = n.home.x; n.z = n.home.z; } }
+function completeQuest(q){ setQ(q.id, 'done'); const got = addCoins(q.reward.coins, 'reward'); SFX.win(); showMsg('✅ Quest complete! +'+got+' 🪙', 2200); gameEvent('quest', { id:q.id }); learnWord(q.reward.word); emit(P.x,P.y+2,P.z,40,{colors:[0xffd43b,0x37d67a,0xffffff,0xff4d88],speed:6,g:5,life:1.5,up:1.5}); if (q.type==='hide'){ const n = npcById(q.npc); if (n){ n.g.position.set(n.home.x,0,n.home.z); n.x = n.home.x; n.z = n.home.z; } }
   const md = mainDone(); if (md.done === md.total) setTimeout(() => showMsg('🎉 All main quests done! Talk to Captain Finn to sail!', 3500), 2500); }
 // hide & seek
 function hideNext(q, idx){ const n = npcById(q.npc); const s = q.spots[idx]; n.x = s.x; n.z = s.z; n.g.position.set(s.x,0,s.z); n.hideIdx = idx; }
 function hideFound(q, n){ const idx = (n.hideIdx||0)+1; if (idx >= q.count){ openDialog(n.cfg.name, q.lines.done, () => completeQuest(q)); n.hideIdx = -1; } else { openDialog(n.cfg.name, [q.lines.found[idx-1]], () => hideNext(q, idx)); } }
 // quiz
-function startQuiz(q){ const qs = q.math ? genMath(q.math, q.count) : q.sets.flatMap(s => QUIZ[s]).slice().sort(() => Math.random()-0.5).slice(0, q.count); quiz = { q, qs, i:0, correct:0 }; state = 'quiz'; $('ovQuiz').classList.remove('hide'); $('quizTitle').textContent = q.title; quizShow(); }
-function quizShow(){ const z = quiz; const it = z.qs[z.i]; $('quizProg').textContent = 'Question '+(z.i+1)+' / '+z.qs.length+'  •  Correct: '+z.correct; $('quizPic').textContent = it.q; $('quizPic').style.fontSize = it.text ? (it.q.length > 20 ? '30px' : '54px') : '110px'; $('quizQ').textContent = it.text ? 'What is the answer?' : 'Which word is this?'; const o = $('quizOpts'); o.innerHTML = ''; it.o.slice().sort(() => Math.random()-0.5).forEach(w => { const b = document.createElement('button'); b.textContent = w; b.className = 'y'; b.onclick = () => quizAnswer(w === it.a, b); o.appendChild(b); }); }
+function startQuiz(q){ const qs = q.math ? genMath(q.math, q.count) : q.sets.flatMap(s => QUIZ[s]).filter(x => !q.spell || !x.a.includes(' ')).slice().sort(() => Math.random()-0.5).slice(0, q.count); quiz = { q, qs, i:0, correct:0 }; state = 'quiz'; $('ovQuiz').classList.remove('hide'); $('quizTitle').textContent = q.title; quizShow(); }
+function quizShow(){ const z = quiz; const it = z.qs[z.i]; $('quizProg').textContent = 'Question '+(z.i+1)+' / '+z.qs.length+'  •  Correct: '+z.correct; $('quizPic').textContent = it.q; $('quizPic').style.fontSize = it.text ? (it.q.length > 20 ? '30px' : '54px') : '110px'; $('quizQ').textContent = z.q.spell ? 'Type the word:' : it.text ? 'What is the answer?' : 'Which word is this?'; const o = $('quizOpts'); o.innerHTML = '';
+  if (z.q.spell){ const inp = document.createElement('input'); inp.id = 'quizInput'; inp.maxLength = 20; inp.placeholder = '...'; inp.autocomplete = 'off'; inp.style.width = '60%'; o.appendChild(inp); const b = document.createElement('button'); b.textContent = 'Check ✓'; b.className = 'y'; const chk = () => { const v = inp.value.trim().toLowerCase(); if (!v) return; const ok = v === it.a.toLowerCase(); inp.style.borderColor = ok ? '#37d67a' : '#ef4444'; if (!ok){ const h = document.createElement('div'); h.style.color = '#37d67a'; h.style.fontSize = '22px'; h.textContent = 'Correct: '+it.a; o.appendChild(h); } inp.disabled = true; quizAnswer(ok, b); }; b.onclick = chk; inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') chk(); }); o.appendChild(b); setTimeout(() => inp.focus(), 50); return; }
+  it.o.slice().sort(() => Math.random()-0.5).forEach(w => { const b = document.createElement('button'); b.textContent = w; b.className = 'y'; b.onclick = () => quizAnswer(w === it.a, b); o.appendChild(b); }); }
 function quizAnswer(ok, b){ const z = quiz; if (ok){ SFX.correct(); z.correct++; b.style.background = '#37d67a'; if (!z.qs[z.i].text) learnWord(z.qs[z.i].a); } else { SFX.wrong(); b.style.background = '#ef4444'; [...$('quizOpts').children].forEach(c => { if (c.textContent === z.qs[z.i].a) c.style.background = '#37d67a'; }); }
-  [...$('quizOpts').children].forEach(c => c.disabled = true);
+  [...$('quizOpts').children].forEach(c => { if (c.tagName === 'BUTTON') c.disabled = true; });
   setTimeout(() => { z.i++; if (z.i < z.qs.length) quizShow(); else quizEnd(); }, 900); }
-function quizEnd(){ const z = quiz; $('ovQuiz').classList.add('hide'); state = 'play'; const n = npcById(z.q.npc); if (z.correct >= Math.ceil(z.qs.length*0.7)){ openDialog(n.cfg.name, ['You got '+z.correct+' out of '+z.qs.length+'!', ...z.q.lines.done], () => completeQuest(z.q)); } else { openDialog(n.cfg.name, ['You got '+z.correct+' out of '+z.qs.length+'. Almost!', 'Practice and try again, hoot!']); } quiz = null; }
+function quizEnd(){ const z = quiz; $('ovQuiz').classList.add('hide'); state = 'play'; const n = npcById(z.q.npc); if (z.correct >= Math.ceil(z.qs.length*0.8)) gameEvent('quizgood', { perfect: z.correct === z.qs.length, math: !!z.q.math }); if (z.correct >= Math.ceil(z.qs.length*0.7)){ openDialog(n.cfg.name, ['You got '+z.correct+' out of '+z.qs.length+'!', ...z.q.lines.done], () => completeQuest(z.q)); } else { openDialog(n.cfg.name, ['You got '+z.correct+' out of '+z.qs.length+'. Almost!', 'Practice and try again, hoot!']); } quiz = null; }
 // objective
 function objective(){ const act = activeQuests(); if (act.length){ const q = act[0]; const n = npcById(q.npc);
     if (q.type === 'collect'){ if (inv(q.item) >= q.count) return { text:'Bring '+q.item+(q.count>1?'s':'')+' to '+n.cfg.name, x:n.x, z:n.z }; let best = null, bd = 1e9; for (const it of items){ if (it.kind === q.item && !it.got){ const d = Math.hypot(it.x-P.x, it.z-P.z); if (d < bd){ bd = d; best = it; } } } return { text:'Find '+q.item+(q.count>1?'s':'')+' ('+inv(q.item)+'/'+q.count+')', x: best?best.x:n.x, z: best?best.z:n.z }; }
@@ -89,17 +91,19 @@ function objective(){ const act = activeQuests(); if (act.length){ const q = act
   const av = island.quests.find(q => questAvailable(q)); if (av){ const n = npcById(av.npc); return { text:'Talk to '+n.cfg.name, x:n.x, z:n.z }; }
   const md = mainDone(); if (md.done === md.total) return { text:'Talk to Captain Finn at the boat ⛵', x:0, z:60 }; return { text:'Explore the island!', x:P.x, z:P.z }; }
 function renderQuests(){ if (!island) return; const el = $('qList'); el.innerHTML = ''; island.quests.forEach(q => { const st = qstate(q.id); if (st === 'new' && !questAvailable(q)) return; const n = npcById(q.npc); const d = document.createElement('div'); d.className = 'q '+st; d.innerHTML = '<div class="t">'+(st==='done'?'✅ ':st==='active'?'⭐ ':'❗ ')+q.title+'</div><div class="d">'+(n?n.cfg.name:'')+' • '+(q.type==='collect'?'Collect '+q.count+' '+q.item+(q.count>1?'s':'')+' ('+Math.min(inv(q.item),q.count)+'/'+q.count+')':q.type==='quiz'?(q.math?'Math quiz':'Word quiz'):q.type==='hide'?'Hide and seek':q.type==='course'?'Obstacle course':q.type==='deliver'?'Delivery':'')+' • 🪙 '+q.reward.coins+'</div>'; el.appendChild(d); });
-  const w = $('wList'); w.innerHTML = ''; (save.words||[]).forEach(x => { const s = document.createElement('span'); s.className = 'w'; s.textContent = x; w.appendChild(s); }); }
+  const w = $('wList'); w.innerHTML = ''; (save.words||[]).forEach(x => { const s = document.createElement('span'); s.className = 'w'; s.textContent = (wordEmoji(x)?wordEmoji(x)+' ':'')+x; w.appendChild(s); }); }
+function wordEmoji(w){ if (ITEM_EMOJI[w]) return ITEM_EMOJI[w]; for (const set of Object.values(QUIZ)){ const f = set.find(q => q.a === w); if (f) return f.q; } return { treasure:'💰', mountain:'⛰️', beach:'🏖️', bridge:'🌉', hide:'🙈', quiz:'❓', plus:'➕', times:'✖️', total:'🧮', letter:'✉️', robot:'🤖', snow:'❄️', crystal:'💎', key:'🔑', winter:'🌨️', yeti:'🦍', bone:'🦴', ice:'🧊', chest:'🧰', lake:'🏞️', peak:'🏔️', coconut:'🥥', volcano:'🌋', nature:'🌿', friend:'🤝', hero:'🦸', jungle:'🌴', lava:'🔥', palm:'🌴', scarab:'🪲', ancient:'🏺', market:'🛒', mummy:'🧟', spelling:'✍️', fraction:'½', sand:'⏳', pyramid:'🔺', tomb:'⚰️', oasis:'🏝️', dune:'🏜️', knight:'🛡️', potion:'🧪', royal:'👑', sword:'⚔️', kingdom:'🏰', area:'📐', hound:'🐕', dragon:'🐉', tower:'🗼', cave:'🕳️', hall:'🏛️', gravity:'🪐', energy:'⚡', launch:'🚀', science:'🔬', astronaut:'🧑‍🚀', mission:'🎯', orbit:'🛰️', deck:'🛸', crater:'🌑', laboratory:'🧫' }[w] || ''; }
 
 // ---------- shop ----------
 let shopCat = 'hoodie';
-function renderShop(){ $('bank').textContent = '🪙 '+save.coins+' coins'; const tabs = [['hoodie','🧥 Hoodies'],['cap','🧢 Hats'],['extra','⚡ Extras'],['kart','🏎️ Karts'],['trail','✨ Trails']]; const tb = $('tabs'); tb.innerHTML = ''; tabs.forEach(([c,n]) => { const b = document.createElement('button'); b.textContent = n; b.className = 'g'+(c===shopCat?' act':''); b.onclick = () => { shopCat = c; SFX.click(); renderShop(); }; tb.appendChild(b); });
-  const it = $('items'); it.innerHTML = ''; SHOP.filter(i => i.cat === shopCat).forEach(i => { const owned = save.owned.includes(i.id) || i.price === 0; const eq = i.cat==='extra' ? !!save.eq[i.id] : save.eq[i.cat] === i.id; const d = document.createElement('div'); d.className = 'it'+(eq?' eq':owned?' own':''); d.innerHTML = '<div class="ic">'+i.ic+'</div><div class="n">'+i.n+'</div><div class="pr">'+(eq?'✅ wearing':owned?'owned':'🪙 '+i.price)+'</div>';
+function renderShop(){ $('bank').textContent = '🪙 '+save.coins+' coins'; const tabs = [['hoodie','🧥 Hoodies'],['cap','🧢 Hats'],['extra','⚡ Extras'],['kart','🏎️ Karts'],['trail','✨ Trails'],['furniture','🛋️ Furniture']]; const tb = $('tabs'); tb.innerHTML = ''; tabs.forEach(([c,n]) => { const b = document.createElement('button'); b.textContent = n; b.className = 'g'+(c===shopCat?' act':''); b.onclick = () => { shopCat = c; SFX.click(); renderShop(); }; tb.appendChild(b); });
+  const it = $('items'); it.innerHTML = ''; SHOP.concat(FURNITURE.map(f => Object.assign({cat:'furniture'}, f))).filter(i => i.cat === shopCat).forEach(i => { const owned = save.owned.includes(i.id) || i.price === 0; const eq = i.cat==='extra' ? !!save.eq[i.id] : i.cat==='furniture' ? Object.values(save.house||{}).includes(i.id) : save.eq[i.cat] === i.id; const d = document.createElement('div'); d.className = 'it'+(eq?' eq':owned?' own':''); d.innerHTML = '<div class="ic">'+i.ic+'</div><div class="n">'+i.n+'</div><div class="pr">'+(eq?(i.cat==='furniture'?'✅ placed':'✅ wearing'):owned?'owned':'🪙 '+i.price)+'</div>';
     d.onclick = () => { if (!owned){ if (save.coins >= i.price){ save.coins -= i.price; save.owned.push(i.id); SFX.chest(); showMsg('Bought: '+i.n+'!'); } else { SFX.nope(); showMsg('Not enough coins! 🪙', 1200); return; } } else SFX.click();
-      if (i.cat === 'extra') save.eq[i.id] = owned ? !save.eq[i.id] : true; else save.eq[i.cat] = i.id; persist(); buildHero(); hud(); renderShop(); if (i.cat === 'kart') karts.forEach(k => { if (k.player){} }); }; it.appendChild(d); }); }
+      if (i.cat === 'furniture'){ persist(); renderShop(); showMsg('Go to My House and tap 🛋️ Decorate!', 2000); return; } if (i.cat === 'extra') save.eq[i.id] = owned ? !save.eq[i.id] : true; else save.eq[i.cat] = i.id; persist(); buildHero(); hud(); renderShop(); if (i.cat === 'kart') karts.forEach(k => { if (k.player){} }); }; it.appendChild(d); }); }
 
 // ---------- island loading ----------
 function loadIsland(i){ clearWorld(); islandIdx = i; island = ISLANDS[i]; setTheme(island.theme); island.build(); items.forEach(buildItemMesh); island.npcs.forEach(n => { const npc = spawnNPC(n.id, n.x, n.z, n.yaw, Object.assign({ name:n.name, idleLines:n.idle }, n.cfg), n.y||0); }); island.chests.forEach(c => chest(c.x, c.z, c.id, c.y||0));
+  buildMyHouse(i); buildRace(i); buildCoop(i); placeSecrets(i); race = null; $('raceHud').style.display = 'none';
   // restore hide&seek position
   island.quests.filter(q => q.type==='hide' && qstate(q.id)==='active').forEach(q => hideNext(q, 0));
   // markers
@@ -107,7 +111,7 @@ function loadIsland(i){ clearWorld(); islandIdx = i; island = ISLANDS[i]; setThe
   P.x = island.spawn.x; P.z = island.spawn.z; P.y = 1; P.vx = P.vy = P.vz = 0; P.safe = { x:P.x, y:0, z:P.z }; riding = null; inRoom = null; interiorCount = 0; camYaw = 0; save.island = i; persist(); hud(); renderQuests(); }
 
 // ---------- menu ----------
-function renderIslands(){ const el = $('islands'); el.innerHTML = ''; const unlocked = save.unlocked||1; ISLANDS.forEach((isl,i) => { const lock = i+1 > unlocked; const done = isl.quests.filter(q => q.main && (save.quests||{})[q.id]==='done').length, total = isl.quests.filter(q => q.main).length; const d = document.createElement('div'); d.className = 'isl'+(lock?' lock':''); d.innerHTML = '<div class="ico">'+(lock?'🔒':['🏝️','🏔️','🌋'][i])+'</div><div class="nm">'+isl.name+'</div><div class="st">'+(lock?'Finish the previous island':'Quests: '+done+'/'+total)+'</div>'; if (!lock) d.onclick = () => { SFX.click(); startIsland(i); }; el.appendChild(d); }); $('menuSub').textContent = (save.name?'Hi '+save.name+'! ':'')+'Explore islands, help villagers, learn words!'; }
+function renderIslands(){ const el = $('islands'); el.innerHTML = ''; const unlocked = save.unlocked||1; ISLANDS.forEach((isl,i) => { const lock = i+1 > unlocked; const done = isl.quests.filter(q => q.main && (save.quests||{})[q.id]==='done').length, total = isl.quests.filter(q => q.main).length; const d = document.createElement('div'); d.className = 'isl'+(lock?' lock':''); d.innerHTML = '<div class="ico">'+(lock?'🔒':['🏝️','🏔️','🌋','🏜️','🏰','🌌'][i])+'</div><div class="nm">'+isl.name+'</div><div class="st">'+(lock?'Finish the previous island':'Quests: '+done+'/'+total)+'</div>'; if (!lock) d.onclick = () => { SFX.click(); startIsland(i); }; el.appendChild(d); }); $('menuSub').textContent = (save.name?'Hi '+save.name+'! ':'')+'Explore islands, help villagers, learn words!'; }
 function startIsland(i){ ensureAC(); fade(true); setTimeout(() => { loadIsland(i); buildHero(); $('ovMenu').classList.add('hide'); state = 'play'; fade(false); startMusic(0); showMsg(island.name, 2000); setTimeout(() => { if (!save.tutorial){ openDialog('Guide', [island.intro, 'Walk with WASD or the joystick. Jump with Space. Press E (or ✋) near a person to talk.', 'Look at the top-left: the arrow shows where to go. Good luck!'], () => { save.tutorial = true; persist(); }); } else openDialog('Guide', [island.intro]); }, 800); }, 400); }
 function toMenu(){ state = 'menu'; stopMusic(); closeDialog(); $('ovMenu').classList.remove('hide'); $('ovPause').classList.add('hide'); $('pQuests').classList.add('hide'); $('pShop').classList.add('hide'); renderIslands(); }
 function askName(){ $('inName').value = save.name||''; $('ovName').classList.remove('hide'); $('ovMenu').classList.add('hide'); setTimeout(() => $('inName').focus(), 50); }
@@ -116,27 +120,33 @@ $('btnNameOk').onclick = nameDone; $('inName').addEventListener('keydown', e => 
 $('btnSound').onclick = () => { save.sound = !save.sound; persist(); ensureAC(); if (master) master.gain.value = save.sound?1:0; $('btnSound').textContent = save.sound?'🔊 Sound':'🔇 Sound'; }; $('btnSound').textContent = save.sound?'🔊 Sound':'🔇 Sound';
 $('btnQuests').onclick = () => { if (state!=='play') return; SFX.click(); renderQuests(); $('pQuests').classList.toggle('hide'); $('pShop').classList.add('hide'); }; $('btnQClose').onclick = () => $('pQuests').classList.add('hide');
 $('btnShop').onclick = () => { if (state!=='play') return; SFX.click(); renderShop(); $('pShop').classList.toggle('hide'); $('pQuests').classList.add('hide'); }; $('btnSClose').onclick = () => $('pShop').classList.add('hide');
-$('btnMenu').onclick = () => { if (state==='play'){ state = 'pause'; $('ovPause').classList.remove('hide'); } }; $('btnResume').onclick = () => { state = 'play'; $('ovPause').classList.add('hide'); }; $('btnQuit').onclick = toMenu;
+$('btnMenu').onclick = () => { if (state==='play'){ state = 'pause'; $('ovPause').classList.remove('hide'); } };
+const closeAll = () => ['pQuests','pShop','pDaily','pTrophy','pBoard','pDecor'].forEach(id => $(id).classList.add('hide'));
+$('btnDaily').onclick = () => { if (state!=='play') return; SFX.click(); const was = $('pDaily').classList.contains('hide'); closeAll(); if (was){ renderDaily(); $('pDaily').classList.remove('hide'); } }; $('btnDClose').onclick = closeAll;
+$('btnTrophy').onclick = () => { if (state!=='play') return; SFX.click(); const was = $('pTrophy').classList.contains('hide'); closeAll(); if (was){ renderTrophies(); $('pTrophy').classList.remove('hide'); } }; $('btnTClose').onclick = closeAll;
+$('btnBoard').onclick = () => { if (state!=='play') return; SFX.click(); const was = $('pBoard').classList.contains('hide'); closeAll(); if (was){ renderBoard(); $('pBoard').classList.remove('hide'); } }; $('btnBClose').onclick = closeAll;
+$('btnDecor').onclick = () => { if (state!=='play') return; SFX.click(); const was = $('pDecor').classList.contains('hide'); closeAll(); if (was){ renderDecor(); $('pDecor').classList.remove('hide'); } }; $('btnDecClose').onclick = closeAll;
+$('btnHard').onclick = () => { save.hard = !save.hard; persist(); SFX.click(); $('btnHard').textContent = save.hard ? '🔥 Hard mode: ON' : '🔥 Hard mode: OFF'; }; $('btnHard').textContent = save.hard ? '🔥 Hard mode: ON' : '🔥 Hard mode: OFF'; $('btnResume').onclick = () => { state = 'play'; $('ovPause').classList.add('hide'); }; $('btnQuit').onclick = toMenu;
 
 // ---------- interactions ----------
 function nearest(list, r, fn){ let best = null, bd = r; for (const o of list){ const d = Math.hypot(o.x-P.x, o.z-P.z); if (d < bd && (!fn || fn(o))){ bd = d; best = o; } } return best; }
 function die(reason){ if (P.dead) return; if (riding){ const k = riding; riding = null; setTimeout(() => resetKart(k), 900); } P.dead = 0.9; SFX.die(); shake = 0.5; emit(P.x,P.y+1,P.z,30,{colors: reason==='water'?[0x9fd8ff,0xffffff,0x3fa9f5]:[0xff6b6b,0xffd43b],speed:8,g:12,life:0.9,size:1.3}); showMsg(reason==='water'?'Splash! 💦':'Ouch! 🔥', 900); }
 function respawn(){ const cp = checkpoints.filter(c => c.on).pop(); let s = P.safe; if (cp && P.onCourse) s = { x:cp.x, y:cp.y+0.1, z:cp.z }; P.x = s.x; P.y = s.y+0.5; P.z = s.z; P.vx = P.vy = P.vz = 0; P.dead = 0; P.onMover = null; P.boost = false; }
 function enterKart(k){ riding = k; k.player = true; camYaw = k.yaw; SFX.click(); showMsg('🏎️ W = gas, S = brake, A/D = steer, Space = TURBO', 2500); }
-function exitKart(){ if (!riding) return; const k = riding; riding = null; k.player = false; const rx = Math.cos(k.yaw), rz = -Math.sin(k.yaw); P.x = k.x + rx*2.2; P.z = k.z + rz*2.2; P.y = k.y + 0.2; P.vx = P.vy = P.vz = 0; k.speed = 0; }
+function exitKart(){ if (!riding) return; const k = riding; riding = null; k.player = false; raceAbort(); const rx = Math.cos(k.yaw), rz = -Math.sin(k.yaw); P.x = k.x + rx*2.2; P.z = k.z + rz*2.2; P.y = k.y + 0.2; P.vx = P.vy = P.vz = 0; k.speed = 0; }
 function resetKart(k){ k.x = k.home.x; k.y = k.home.y; k.z = k.home.z; k.yaw = k.home.yaw; k.speed = 0; k.vy = 0; k.g.position.set(k.x,k.y,k.z); k.g.rotation.set(0,k.yaw,0); }
 function doAction(){
   if (dialog){ dialogNext(); return; }
   if (riding){ exitKart(); return; }
   const n = nearest(npcs, 3.2, o => o.cfg.name); if (n){ const hq = activeQuests().find(q => q.type==='hide' && q.npc===n.id && n.hideIdx >= 0 && n.hideIdx !== undefined); if (hq){ hideFound(hq, n); return; } talkTo(n); return; }
-  const c = nearest(chests, 2.6, o => !o.opened); if (c){ const data = island.chests.find(x => x.id === c.id); if (data.needs && inv(data.needs) < 1){ showMsg('🔒 Locked! You need a '+data.needs+'.', 1800); SFX.nope(); return; } if (data.needs) addInv(data.needs,-1); c.opened = true; c.lid.rotation.x = -1.6; save.chests = save.chests||[]; save.chests.push(c.id); save.coins += data.coins; persist(); hud(); SFX.chest(); learnWord(data.word); showMsg('💰 Treasure! +'+data.coins+' 🪙', 2200); emit(c.x,c.y+1,c.z,40,{colors:[0xffd43b,0xfff3b0,0xffffff],speed:6,g:6,life:1.4,up:1.6}); return; }
+  const c = nearest(chests, 2.6, o => !o.opened); if (c){ const data = island.chests.find(x => x.id === c.id); if (data.needs && inv(data.needs) < 1){ showMsg('🔒 Locked! You need a '+data.needs+'.', 1800); SFX.nope(); return; } if (data.needs) addInv(data.needs,-1); c.opened = true; c.lid.rotation.x = -1.6; save.chests = save.chests||[]; save.chests.push(c.id); const got = addCoins(data.coins, 'reward'); SFX.chest(); learnWord(data.word); showMsg('💰 Treasure! +'+got+' 🪙', 2200); gameEvent('chest', {}); emit(c.x,c.y+1,c.z,40,{colors:[0xffd43b,0xfff3b0,0xffffff],speed:6,g:6,life:1.4,up:1.6}); return; }
   const k = nearest(karts, 3.5); if (k){ enterKart(k); return; }
   const dr = nearest(triggers, 2.4, o => o.kind==='door'); if (dr){ enterRoom(dr); return; }
   const ex = nearest(triggers, 2.0, o => o.kind==='exit'); if (ex){ leaveRoom(ex); return; }
   const b = nearest(triggers, 4, o => o.kind==='boat'); if (b){ boatTalk(); return; }
 }
 let inRoom = null;
-function enterRoom(dr){ SFX.click(); fade(true); setTimeout(() => { const r = dr.room; inRoom = r; P.x = r.cx; P.z = r.cz+3.2; P.y = 0.1; P.vx = P.vy = P.vz = 0; P.yaw = Math.PI; camYaw = Math.PI; P.safe = { x:P.x, y:0, z:P.z }; fade(false); showMsg('🏠 Inside', 1000); }, 350); }
+function enterRoom(dr){ SFX.click(); gameEvent('house', {}); fade(true); setTimeout(() => { const r = dr.room; inRoom = r; P.x = r.cx; P.z = r.cz+3.2; P.y = 0.1; P.vx = P.vy = P.vz = 0; P.yaw = Math.PI; camYaw = Math.PI; P.safe = { x:P.x, y:0, z:P.z }; fade(false); showMsg('🏠 Inside', 1000); }, 350); }
 function leaveRoom(ex){ SFX.click(); fade(true); setTimeout(() => { const d = ex.door; inRoom = null; P.x = d.outX; P.z = d.outZ; P.y = 0.1; P.vx = P.vy = P.vz = 0; P.yaw = d.rot; camYaw = d.rot; P.safe = { x:P.x, y:0, z:P.z }; fade(false); }, 350); }
 function boatTalk(){ const md = mainDone(); const next = islandIdx+1 < ISLANDS.length; const choices = [];
   if (md.done === md.total && next){ choices.push({ label:'⛵ Sail to '+ISLANDS[islandIdx+1].name, fn:() => { save.unlocked = Math.max(save.unlocked||1, islandIdx+2); persist(); travel(islandIdx+1); } }); }
@@ -160,14 +170,14 @@ function updatePeers(dt, t){ peers.forEach(pr => { const vis = pr.isl === island
   if (myRef){ presT += dt; if (presT > 0.12){ presT = 0; const data = state==='play' ? { x:+P.x.toFixed(2), y:+P.y.toFixed(2), z:+P.z.toFixed(2), yaw:+P.yaw.toFixed(2), i:islandIdx, hd:save.eq.hoodie, cp:save.eq.cap, gl:!!save.eq.glasses, bp:!!save.eq.backpack, n:save.name||'Player', r:riding?1:0 } : { n:save.name||'Player', i:-1 }; const key = JSON.stringify(data); if (key !== lastSent || Math.random() < 0.05){ lastSent = key; data.t = firebase.database.ServerValue.TIMESTAMP; myRef.set(data).catch(() => {}); } } } }
 
 // ---------- update ----------
-let trailT = 0, promptT = '';
+let trailT = 0, promptT = '', kartDist = 0, jumpCnt = 0;
 function setPrompt(t){ if (t !== promptT){ promptT = t; ui.promptText.textContent = t; ui.prompt.classList.toggle('show', !!t); } }
 function update(dt){
   const t = performance.now()/1000;
   // world animation
-  movers.forEach(m => { const ph = t*Math.PI*2/m.period + m.phase; const nx = m.x0 + Math.sin(ph)*m.dx, nz = m.z0 + Math.sin(ph)*m.dz; m.vx = nx-m.x; m.vz = nz-m.z; m.x = nx; m.z = nz; m.m.position.set(nx, m.y, nz); });
-  killers.forEach(k => { const ph = t*Math.PI*2/k.period + k.phase; k.x = k.x0 + (Math.sin(ph)*0.5+0.5)*k.dx; k.m.position.set(k.x,k.y,k.z); });
-  bars.forEach(b => { b.a += b.speed*dt; b.g.rotation.y = b.a; });
+  const HF = hardFactor(); movers.forEach(m => { const ph = t*Math.PI*2*HF/m.period + m.phase; const nx = m.x0 + Math.sin(ph)*m.dx, nz = m.z0 + Math.sin(ph)*m.dz; m.vx = nx-m.x; m.vz = nz-m.z; m.x = nx; m.z = nz; m.m.position.set(nx, m.y, nz); });
+  killers.forEach(k => { const ph = t*Math.PI*2*HF/k.period + k.phase; k.x = k.x0 + (Math.sin(ph)*0.5+0.5)*k.dx; k.m.position.set(k.x,k.y,k.z); });
+  bars.forEach(b => { b.a += b.speed*HF*dt; b.g.rotation.y = b.a; });
   items.forEach(it => { if (!it.got){ it.g.rotation.y = t*1.5 + it.x; it.g.position.y = it.y + Math.sin(t*3+it.x)*0.12; } });
   pads.forEach(p => p.a.position.y = p.y + 0.05 + Math.abs(Math.sin(t*4))*0.4);
   triggers.forEach(tr => { if (tr.kind==='boat'){ tr.g.position.y = -0.5 + Math.sin(t*1.2+tr.g.userData.bob)*0.15; tr.g.rotation.z = Math.sin(t*0.9)*0.04; } });
@@ -186,12 +196,13 @@ function update(dt){
   if (inputEv.action){ inputEv.action = false; doAction(); if (dialog) return; }
   // prompts
   let pr = ''; if (riding) pr = 'E / ✋ — get out'; else { const n = nearest(npcs, 3.2, o => o.cfg.name); const c = nearest(chests, 2.6, o => !o.opened); const k = nearest(karts, 3.5); const b = nearest(triggers, 4, o => o.kind==='boat'); const dr = nearest(triggers, 2.4, o => o.kind==='door'); const ex = nearest(triggers, 2.0, o => o.kind==='exit'); if (n) pr = 'E / ✋ — talk to '+n.cfg.name; else if (c) pr = 'E / ✋ — open chest'; else if (dr) pr = 'E / ✋ — enter the house'; else if (ex) pr = 'E / ✋ — go outside'; else if (k) pr = 'E / ✋ — drive the kart'; else if (b) pr = 'E / ✋ — the boat'; } setPrompt(pr);
-  $('be').textContent = riding ? '⬅' : pr ? '✋' : '✋';
+  $('be').textContent = riding ? '⬅' : pr ? '✋' : '✋'; $('btnDecor').style.display = (myHouse && inRoom === myHouse.room) ? 'inline-block' : 'none';
   // items near: show labels
   items.forEach(it => { if (it.lbl){ const d = Math.hypot(it.x-P.x, it.z-P.z); it.lbl.visible = !it.got && d < 8; } });
   // objective
   const ob = inRoom ? { text:'Inside a house — go to the door to leave', x:inRoom.exit.x, z:inRoom.exit.z } : objective(); $('objText').textContent = ob.text; const ang = Math.atan2(ob.x-P.x, ob.z-P.z) - camYaw; $('compass').style.transform = 'rotate('+(-(ang)*180/Math.PI + 180)+'deg)';
 
+  updateCoop(dt); $('hSecrets').textContent = '🌟 '+secretCount(islandIdx)+'/20';
   if (riding){ updateKart(riding, dt, t); return; }
   // ---- player physics ----
   const mv = readMove(); const cv = camVectors();
@@ -199,9 +210,9 @@ function update(dt){
   const mx = (cv.rx*mv.ix - cv.fx*mv.iz)*SPEED, mz = (cv.rz*mv.ix - cv.fz*mv.iz)*SPEED;
   const fr = theme.amb==='snow' && P.ground && !(P.groundBlock && P.groundBlock.isMover) ? 0.1 : P.ground ? 0.25 : 0.08; P.vx += (mx-P.vx)*fr; P.vz += (mz-P.vz)*fr;
   if (mv.l > 0.1) P.yaw = Math.atan2(mx, mz);
-  const G = 28, JV = Math.sqrt(2*G*2.2); const maxJumps = save.eq.wings ? 3 : 2;
+  const G = theme.gravity||28, JV = Math.sqrt(2*G*(G < 28 ? 4.2 : 2.2)); const maxJumps = hardMode() ? 1 : (save.eq.wings ? 3 : 2);
   P.jumpBuf = inputEv.jump ? 0.15 : Math.max(0, P.jumpBuf-dt); inputEv.jump = false; P.coyote = P.ground ? 0.12 : P.coyote - dt;
-  if (P.jumpBuf > 0 && P.coyote > 0){ P.vy = JV; P.ground = false; P.coyote = 0; P.jumpBuf = 0; P.jumps = 1; SFX.jump(); emit(P.x,P.y,P.z,8,{colors:[0xffffff,0xdddddd],speed:3,g:6,life:0.4,spread:0.8}); }
+  if (P.jumpBuf > 0 && P.coyote > 0){ P.vy = JV; P.ground = false; P.coyote = 0; P.jumpBuf = 0; P.jumps = 1; SFX.jump(); emit(P.x,P.y,P.z,8,{colors:[0xffffff,0xdddddd],speed:3,g:6,life:0.4,spread:0.8}); if (++jumpCnt >= 5){ gameEvent('jump', { n: jumpCnt }); jumpCnt = 0; } }
   else if (P.jumpBuf > 0 && !P.ground && P.jumps < maxJumps && P.jumps > 0){ P.vy = JV*0.95; P.jumps++; P.jumpBuf = 0; SFX.djump(); emit(P.x,P.y+0.5,P.z,16,{colors:[0xaaddff,0xffffff],speed:5,g:3,life:0.6,spread:1}); }
   const held = keys.Space || jumpBtn; P.vy -= G*dt; if (P.vy < -30) P.vy = -30; if (!held && P.vy > 3 && !P.boost) P.vy -= G*dt*1.2; if (P.vy <= 0) P.boost = false;
   const res = moveEntity(P, dt, { step: 0.55 }); if (P.ground) P.jumps = 0;
@@ -216,10 +227,10 @@ function update(dt){
   for (const p of pads){ if (Math.abs(P.x-p.x) < 1.3 && Math.abs(P.z-p.z) < 1.3 && P.y <= p.y+0.05 && P.y > p.y-0.6){ P.vy = Math.sqrt(2*G*6.5); P.boost = true; P.ground = false; P.y = p.y+0.05; SFX.pad(); emit(P.x,P.y,P.z,25,{colors:[0xffd43b,0xffffff],speed:6,g:8,life:0.6,spread:1.5}); } }
   if (P.y < -0.9) die('water');
   // pickups
-  for (const it of items){ if (!it.got && Math.hypot(P.x-it.x, P.z-it.z) < it.r && Math.abs((P.y+0.9)-it.y) < 2.2){ it.got = true; it.g.visible = false; if (it.kind === 'coin'){ save.coins += 1; SFX.coin(); } else { addInv(it.kind); SFX.item(); showMsg(ITEM_EMOJI[it.kind]+' '+it.kind+' ('+inv(it.kind)+')', 1200); } persist(); hud(); emit(it.x,it.y,it.z,12,{colors:[0xffd43b,0xfff3b0,0xffffff],speed:4,g:4,life:0.6}); } }
+  for (const it of items){ if (!it.got && Math.hypot(P.x-it.x, P.z-it.z) < it.r && Math.abs((P.y+0.9)-it.y) < 2.2){ it.got = true; it.g.visible = false; if (it.kind === 'coin'){ addCoins(1); SFX.coin(); } else if (it.kind === 'secret'){ onSecret(it); } else { addInv(it.kind); SFX.item(); showMsg(ITEM_EMOJI[it.kind]+' '+it.kind+' ('+inv(it.kind)+')', 1200); gameEvent('item', {}); } persist(); hud(); emit(it.x,it.y,it.z,12,{colors:[0xffd43b,0xfff3b0,0xffffff],speed:4,g:4,life:0.6}); } }
   // checkpoints & finish
-  for (const c of checkpoints) if (!c.on && Math.abs(P.x-c.x) < 1.6 && Math.abs(P.z-c.z) < 1.6 && Math.abs(P.y-c.y) < 1.2){ c.on = true; c.flag.material = mat(0x37d67a,{emissive:0x0a5a2a,emissiveIntensity:0.5}); SFX.check(); emit(c.x,c.y+1,c.z,25,{colors:[0x37d67a,0xffffff],speed:5,g:3,life:1}); if (c.n > 0) showMsg('Checkpoint '+c.n+' ✅', 1200); }
-  for (const f of courseFinish) if (Math.abs(P.x-f.x) < 2.2 && Math.abs(P.z-f.z) < 2.2 && Math.abs(P.y-f.y) < 2){ const q = activeQuests().find(q => q.type==='course' && q.target===f.id); if (q){ SFX.win(); emit(P.x,P.y+2,P.z,60,{colors:[0xff4d88,0xffd43b,0x37d67a,0x3498db,0xffffff],speed:7,g:5,life:2,size:1.3,up:1.5}); const n = npcById(q.npc); openDialog(n.cfg.name, q.lines.done, () => { completeQuest(q); P.x = n.x+2; P.z = n.z+2; P.y = 0.5; P.safe = {x:P.x,y:0,z:P.z}; }); } else if (!f.cheer || t-f.cheer > 5){ f.cheer = t; showMsg('🏁 Finish! (Accept the quest from Captain Finn first)', 2000); } }
+  for (const c of checkpoints) if (!c.on && Math.abs(P.x-c.x) < 1.6 && Math.abs(P.z-c.z) < 1.6 && Math.abs(P.y-c.y) < 1.2){ c.on = true; c.flag.material = mat(0x37d67a,{emissive:0x0a5a2a,emissiveIntensity:0.5}); SFX.check(); emit(c.x,c.y+1,c.z,25,{colors:[0x37d67a,0xffffff],speed:5,g:3,life:1}); if (c.n > 0) showMsg('Checkpoint '+c.n+' ✅', 1200); else courseStart(c.course); }
+  for (const f of courseFinish) if (Math.abs(P.x-f.x) < 2.2 && Math.abs(P.z-f.z) < 2.2 && Math.abs(P.y-f.y) < 2){ const q = activeQuests().find(q => q.type==='course' && q.target===f.id); const cres = (!f.cheer || t-f.cheer > 5) ? courseFinished(f.id) : null; if (q){ SFX.win(); emit(P.x,P.y+2,P.z,60,{colors:[0xff4d88,0xffd43b,0x37d67a,0x3498db,0xffffff],speed:7,g:5,life:2,size:1.3,up:1.5}); const n = npcById(q.npc); openDialog(n.cfg.name, q.lines.done, () => { completeQuest(q); P.x = n.x+2; P.z = n.z+2; P.y = 0.5; P.safe = {x:P.x,y:0,z:P.z}; }); } else if (!f.cheer || t-f.cheer > 5){ f.cheer = t; if (!cres) showMsg('🏁 Finish!', 1500); checkpoints.forEach(c => { c.on = false; c.flag.material = mat(0xcccccc); }); } }
   // hide & seek proximity
   activeQuests().filter(q => q.type==='hide').forEach(q => { const n = npcById(q.npc); if (n.hideIdx >= 0 && Math.hypot(P.x-n.x,P.z-n.z) < 3.5 && !dialog){ hideFound(q, n); } });
   // trail + anim
@@ -230,7 +241,7 @@ function updateKart(k, dt, t){
   const mv = readMove(); const ix = clamp(mv.ix,-1,1), iz = clamp(mv.iz,-1,1); const nitro = (keys.Space||jumpBtn) && iz < 0; const maxV = 18*(nitro?1.5:1);
   if (iz < 0) k.speed += 14*dt*(nitro?1.6:1); else if (iz > 0) k.speed -= (k.speed > 0 ? 22 : 8)*dt; else k.speed *= Math.pow(0.3, dt); k.speed = clamp(k.speed, -7, maxV);
   k.yaw += -ix*2.2*dt*clamp(k.speed/8,-1,1); const fx = -Math.sin(k.yaw), fz = -Math.cos(k.yaw);
-  k.vy -= 28*dt; k.launchCd -= dt; const e = { x:k.x, y:k.y, z:k.z, w:k.w, h:k.h, vx:fx*k.speed, vy:k.vy, vz:fz*k.speed, ground:false, onMover:k.onMover, bumped:false };
+  k.vy -= (theme.gravity||28)*dt; k.launchCd -= dt; const e = { x:k.x, y:k.y, z:k.z, w:k.w, h:k.h, vx:fx*k.speed, vy:k.vy, vz:fz*k.speed, ground:false, onMover:k.onMover, bumped:false };
   moveEntity(e, dt, { step:0.5 }); if (e.bumped && Math.abs(k.speed) > 4){ k.speed *= -0.3; shake = 0.2; SFX.land(); } k.x = e.x; k.y = e.y; k.z = e.z; k.vy = e.vy; k.ground = e.ground; k.onMover = e.onMover;
   for (const r of ramps){ if (k.ground && k.launchCd <= 0 && Math.abs(k.x-r.x) < r.w/2 && Math.abs(k.z-r.z) < 1 && Math.abs(k.y-r.top) < 0.4 && k.speed > 6){ k.vy = Math.min(9, 3+k.speed*0.25); k.ground = false; k.launchCd = 1; SFX.pad(); emit(k.x,k.y,k.z,30,{colors:[0xffd43b,0xffffff],speed:6,g:8,life:0.7,spread:2}); } }
   k.g.position.set(k.x,k.y,k.z); k.g.rotation.y = k.yaw; k.g.rotation.z = lerp(k.g.rotation.z, -ix*0.08*clamp(k.speed/10,0,1), 0.2); k.wheels.forEach((w,i) => { w.rotation.x += k.speed*dt*2.2; if (i < 2) w.rotation.y = -ix*0.5; });
@@ -239,7 +250,8 @@ function updateKart(k, dt, t){
   for (const h of hazards){ if (h.water) continue; if (Math.abs(k.x-h.x) < h.w/2+0.8 && Math.abs(k.z-h.z) < h.d/2+0.8 && k.y < h.y+h.h/2+0.15){ die('fire'); return; } }
   for (const b of bars){ const dx = k.x-b.x, dz = k.z-b.z; const c = Math.cos(-b.a), s = Math.sin(-b.a); const lx = dx*c-dz*s, lz = dx*s+dz*c; if (Math.abs(lx) < b.len/2+1 && Math.abs(lz) < 1.5 && k.y < b.y+0.4 && k.y+1.2 > b.y-0.4){ die('bar'); return; } }
   if (k.y < -0.9){ die('water'); return; }
-  for (const it of items){ if (!it.got && it.kind==='coin' && Math.hypot(k.x-it.x, k.z-it.z) < 2){ it.got = true; it.g.visible = false; save.coins++; hud(); SFX.coin(); } }
+  for (const it of items){ if (!it.got && it.kind==='coin' && Math.hypot(k.x-it.x, k.z-it.z) < 2){ it.got = true; it.g.visible = false; addCoins(1); SFX.coin(); } }
+  kartDist += Math.abs(k.speed)*dt; if (kartDist > 25){ gameEvent('kart', { n: kartDist }); kartDist = 0; } updateRace(k, dt);
   if (k.ground && P.safeT !== undefined){ P.safe = { x:k.x, y:k.y, z:k.z }; }
   animChar(HP, t, { walk:0, speed:0, sit:true });
 }
