@@ -50,13 +50,13 @@ function startMusic(i=0){ ensureAC(); if (!AC) return; songIdx = i; songStep = 0
 function stopMusic(){ musicOn = false; }
 
 // ---------- RENDERER / SCENE ----------
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', logarithmicDepthBuffer: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05; renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 700);
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.5, 700);
 const hemi = new THREE.HemisphereLight(0xffffff, 0x6a9a4a, 0.75); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff4e0, 1.5); sun.castShadow = true; sun.shadow.mapSize.set(2048,2048);
 Object.assign(sun.shadow.camera, { left:-50, right:50, top:50, bottom:-50, near:1, far:250 }); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.02;
