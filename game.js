@@ -18,13 +18,13 @@ const P = { x:0, y:1, z:0, vx:0, vy:0, vz:0, w:0.8, h:1.9, ground:false, onMover
 const hero = new THREE.Group(); scene.add(hero); let HP = null;
 function heroCfg(){ const capId = save.eq.cap; return { hoodie: HOODIES[save.eq.hoodie]||0xffd43b, cap: CAPS[capId]===undefined?0xef4444:CAPS[capId], capBack:true, glasses:false, sunglasses:!!save.eq.glasses, backpack:!!save.eq.backpack, name: save.name||'Player', nameColor:'#ffd43b' }; }
 function buildHero(){ HP = buildChar(hero, heroCfg()); if (save.eq.wings){ const wm = mat(0xffffff,{emissive:0xaaddff,emissiveIntensity:0.3}); const w1 = mesh(rgeo(0.9,0.6,0.08,0.05), wm, -0.8,1.3,0.35, hero); w1.rotation.y = 0.4; const w2 = mesh(rgeo(0.9,0.6,0.08,0.05), wm, 0.8,1.3,0.35, hero); w2.rotation.y = -0.4; HP.wings = [w1,w2]; } }
-let state = 'menu', island = null, islandIdx = 0, riding = null, dialog = null, quiz = null, shake = 0, elapsedT = 0, lastSafeGround = null;
+let state = 'menu', island = null, islandIdx = 0, riding = null, dialog = null, quiz = null, shake = 0, elapsedT = 0, lastSafeGround = null, gravityOverride = 0, towerMode = null;
 const ui = { prompt: $('prompt'), promptText: $('promptText') };
 
 // ---------- UI helpers ----------
 function showMsg(t, ms=1600){ const m = $('msg'); m.textContent = t; m.classList.add('show'); clearTimeout(m._t); m._t = setTimeout(() => m.classList.remove('show'), ms); }
 function fade(on){ $('fade').style.opacity = on ? 1 : 0; }
-function hud(){ $('hCoins').textContent = '🪙 '+save.coins; $('hWords').textContent = '📖 '+(save.words||[]).length; if (island) $('hIsland').textContent = island.name; }
+function hud(){ $('hCoins').textContent = '🪙 '+save.coins; $('hLevel').textContent = 'Lv '+playerLevel(); $('hWords').textContent = '📖 '+(save.words||[]).length; if (island) $('hIsland').textContent = island.name; }
 function cleanName(n){ return String(n||'').replace(/[^\p{L}\p{N} _\-!]/gu,'').trim().slice(0,14); }
 function inv(kind){ return (save.items||{})[kind]||0; }
 function addInv(kind, n=1){ save.items = save.items||{}; save.items[kind] = (save.items[kind]||0)+n; }
@@ -62,7 +62,7 @@ function talkTo(n){
   }
   const av = qs.find(q => questAvailable(q));
   if (av){ openDialog(n.cfg.name, av.lines.offer, null, { choices:[{label:'Yes, I will help! ✅', fn:() => acceptQuest(av, n)}, {label:'Maybe later', cls:'g', fn:() => {}}] }); return; }
-  // boat captain extra: travel
+  if (n.id === 'owl'){ openDialog(n.cfg.name, ['Hoot! Want to try the Brain Marathon?','Endless questions, harder and harder. 3 mistakes and it is over!','Best score: '+(save.brainBest||0)], null, { choices:[{label:'🧠 Brain Marathon!', fn:() => startMarathon()}, {label:'Not now', cls:'g', fn:() => {}}] }); return; }
   const idle = n.cfg.idleLines || ['Hello!']; openDialog(n.cfg.name, [idle[Math.floor(Math.random()*idle.length)]]);
 }
 function acceptQuest(q, n){ setQ(q.id, 'active'); SFX.quest(); showMsg('📜 New quest: '+q.title, 2200); openDialog(n.cfg.name, q.lines.accept, () => { if (q.type === 'hide') hideNext(q, 0); if (q.type === 'quiz') startQuiz(q); }); }
@@ -73,12 +73,12 @@ function hideNext(q, idx){ const n = npcById(q.npc); const s = q.spots[idx]; n.x
 function hideFound(q, n){ const idx = (n.hideIdx||0)+1; if (idx >= q.count){ openDialog(n.cfg.name, q.lines.done, () => completeQuest(q)); n.hideIdx = -1; } else { openDialog(n.cfg.name, [q.lines.found[idx-1]], () => hideNext(q, idx)); } }
 // quiz
 function startQuiz(q){ const qs = q.math ? genMath(q.math, q.count) : q.sets.flatMap(s => QUIZ[s]).filter(x => !q.spell || !x.a.includes(' ')).slice().sort(() => Math.random()-0.5).slice(0, q.count); quiz = { q, qs, i:0, correct:0 }; state = 'quiz'; $('ovQuiz').classList.remove('hide'); $('quizTitle').textContent = q.title; quizShow(); }
-function quizShow(){ const z = quiz; const it = z.qs[z.i]; $('quizProg').textContent = 'Question '+(z.i+1)+' / '+z.qs.length+'  •  Correct: '+z.correct; $('quizPic').textContent = it.q; $('quizPic').style.fontSize = it.text ? (it.q.length > 20 ? '30px' : '54px') : '110px'; $('quizQ').textContent = z.q.spell ? 'Type the word:' : it.text ? 'What is the answer?' : 'Which word is this?'; const o = $('quizOpts'); o.innerHTML = '';
-  if (z.q.spell){ const inp = document.createElement('input'); inp.id = 'quizInput'; inp.maxLength = 20; inp.placeholder = '...'; inp.autocomplete = 'off'; inp.style.width = '60%'; o.appendChild(inp); const b = document.createElement('button'); b.textContent = 'Check ✓'; b.className = 'y'; const chk = () => { const v = inp.value.trim().toLowerCase(); if (!v) return; const ok = v === it.a.toLowerCase(); inp.style.borderColor = ok ? '#37d67a' : '#ef4444'; if (!ok){ const h = document.createElement('div'); h.style.color = '#37d67a'; h.style.fontSize = '22px'; h.textContent = 'Correct: '+it.a; o.appendChild(h); } inp.disabled = true; quizAnswer(ok, b); }; b.onclick = chk; inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') chk(); }); o.appendChild(b); setTimeout(() => inp.focus(), 50); return; }
+function quizShow(){ const z = quiz; if (z.marathon && !z.qs[z.i]) z.qs[z.i] = marathonQuestion(z.i); const it = z.qs[z.i]; $('quizProg').textContent = z.marathon ? 'Question '+(z.i+1)+'  •  Score: '+z.correct+'  •  ❌ '+z.wrong+'/3' : 'Question '+(z.i+1)+' / '+z.qs.length+'  •  Correct: '+z.correct; $('quizPic').textContent = it.q; $('quizPic').style.fontSize = it.text ? (it.q.length > 20 ? '30px' : '54px') : '110px'; const spellNow = z.q.spell || it.spellQ; $('quizQ').textContent = spellNow ? 'Type the word:' : it.text ? 'What is the answer?' : 'Which word is this?'; const o = $('quizOpts'); o.innerHTML = '';
+  if (spellNow){ const inp = document.createElement('input'); inp.id = 'quizInput'; inp.maxLength = 20; inp.placeholder = '...'; inp.autocomplete = 'off'; inp.style.width = '60%'; o.appendChild(inp); const b = document.createElement('button'); b.textContent = 'Check ✓'; b.className = 'y'; const chk = () => { const v = inp.value.trim().toLowerCase(); if (!v) return; const ok = v === it.a.toLowerCase(); inp.style.borderColor = ok ? '#37d67a' : '#ef4444'; if (!ok){ const h = document.createElement('div'); h.style.color = '#37d67a'; h.style.fontSize = '22px'; h.textContent = 'Correct: '+it.a; o.appendChild(h); } inp.disabled = true; quizAnswer(ok, b); }; b.onclick = chk; inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') chk(); }); o.appendChild(b); setTimeout(() => inp.focus(), 50); return; }
   it.o.slice().sort(() => Math.random()-0.5).forEach(w => { const b = document.createElement('button'); b.textContent = w; b.className = 'y'; b.onclick = () => quizAnswer(w === it.a, b); o.appendChild(b); }); }
-function quizAnswer(ok, b){ const z = quiz; if (ok){ SFX.correct(); z.correct++; b.style.background = '#37d67a'; if (!z.qs[z.i].text) learnWord(z.qs[z.i].a); } else { SFX.wrong(); b.style.background = '#ef4444'; [...$('quizOpts').children].forEach(c => { if (c.textContent === z.qs[z.i].a) c.style.background = '#37d67a'; }); }
+function quizAnswer(ok, b){ const z = quiz; if (ok){ SFX.correct(); z.correct++; b.style.background = '#37d67a'; if (!z.qs[z.i].text) learnWord(z.qs[z.i].a); if (z.marathon) addCoins(2); } else { SFX.wrong(); z.wrong = (z.wrong||0)+1; b.style.background = '#ef4444'; [...$('quizOpts').children].forEach(c => { if (c.textContent === z.qs[z.i].a) c.style.background = '#37d67a'; }); }
   [...$('quizOpts').children].forEach(c => { if (c.tagName === 'BUTTON') c.disabled = true; });
-  setTimeout(() => { z.i++; if (z.i < z.qs.length) quizShow(); else quizEnd(); }, 900); }
+  setTimeout(() => { z.i++; if (z.marathon){ if (z.wrong >= 3) marathonEnd(); else quizShow(); } else if (z.i < z.qs.length) quizShow(); else quizEnd(); }, 900); }
 function quizEnd(){ const z = quiz; $('ovQuiz').classList.add('hide'); state = 'play'; const n = npcById(z.q.npc); if (z.correct >= Math.ceil(z.qs.length*0.8)) gameEvent('quizgood', { perfect: z.correct === z.qs.length, math: !!z.q.math }); if (z.correct >= Math.ceil(z.qs.length*0.7)){ openDialog(n.cfg.name, ['You got '+z.correct+' out of '+z.qs.length+'!', ...z.q.lines.done], () => completeQuest(z.q)); } else { openDialog(n.cfg.name, ['You got '+z.correct+' out of '+z.qs.length+'. Almost!', 'Practice and try again, hoot!']); } quiz = null; }
 // objective
 function objective(){ const act = activeQuests(); if (act.length){ const q = act[0]; const n = npcById(q.npc);
@@ -102,8 +102,8 @@ function renderShop(){ $('bank').textContent = '🪙 '+save.coins+' coins'; cons
       if (i.cat === 'furniture'){ persist(); renderShop(); showMsg('Go to My House and tap 🛋️ Decorate!', 2000); return; } if (i.cat === 'extra') save.eq[i.id] = owned ? !save.eq[i.id] : true; else save.eq[i.cat] = i.id; persist(); buildHero(); hud(); renderShop(); if (i.cat === 'kart') karts.forEach(k => { if (k.player){} }); }; it.appendChild(d); }); }
 
 // ---------- island loading ----------
-function loadIsland(i){ clearWorld(); islandIdx = i; island = ISLANDS[i]; setTheme(island.theme); island.build(); items.forEach(buildItemMesh); island.npcs.forEach(n => { const npc = spawnNPC(n.id, n.x, n.z, n.yaw, Object.assign({ name:n.name, idleLines:n.idle }, n.cfg), n.y||0); }); island.chests.forEach(c => chest(c.x, c.z, c.id, c.y||0));
-  buildMyHouse(i); buildRace(i); buildCoop(i); placeSecrets(i); race = null; $('raceHud').style.display = 'none';
+function loadIsland(i){ clearWorld(); gravityOverride = 0; towerMode = null; islandIdx = i; island = getIsland(i); setTheme(island.theme); island.build(); items.forEach(buildItemMesh); island.npcs.forEach(n => { const npc = spawnNPC(n.id, n.x, n.z, n.yaw, Object.assign({ name:n.name, idleLines:n.idle }, n.cfg), n.y||0); }); island.chests.forEach(c => chest(c.x, c.z, c.id, c.y||0));
+  buildMyHouse(i); buildRace(i); buildCoop(i); placeSecrets(i); buildTowerPortal(); race = null; $('raceHud').style.display = 'none';
   // restore hide&seek position
   island.quests.filter(q => q.type==='hide' && qstate(q.id)==='active').forEach(q => hideNext(q, 0));
   // markers
@@ -111,9 +111,11 @@ function loadIsland(i){ clearWorld(); islandIdx = i; island = ISLANDS[i]; setThe
   P.x = island.spawn.x; P.z = island.spawn.z; P.y = 1; P.vx = P.vy = P.vz = 0; P.safe = { x:P.x, y:0, z:P.z }; riding = null; inRoom = null; interiorCount = 0; camYaw = 0; save.island = i; persist(); hud(); renderQuests(); }
 
 // ---------- menu ----------
-function renderIslands(){ const el = $('islands'); el.innerHTML = ''; const unlocked = save.unlocked||1; ISLANDS.forEach((isl,i) => { const lock = i+1 > unlocked; const done = isl.quests.filter(q => q.main && (save.quests||{})[q.id]==='done').length, total = isl.quests.filter(q => q.main).length; const d = document.createElement('div'); d.className = 'isl'+(lock?' lock':''); d.innerHTML = '<div class="ico">'+(lock?'🔒':['🏝️','🏔️','🌋','🏜️','🏰','🌌'][i])+'</div><div class="nm">'+isl.name+'</div><div class="st">'+(lock?'Finish the previous island':'Quests: '+done+'/'+total)+'</div>'; if (!lock) d.onclick = () => { SFX.click(); startIsland(i); }; el.appendChild(d); }); $('menuSub').textContent = (save.name?'Hi '+save.name+'! ':'')+'Explore islands, help villagers, learn words!'; }
+function renderIslands(){ const el = $('islands'); el.innerHTML = ''; const unlocked = save.unlocked||1; const count = Math.max(6, unlocked+1); for (let i=0;i<count;i++){ const isl = getIsland(i); const lock = i+1 > unlocked; const done = isl.quests.filter(q => q.main && (save.quests||{})[q.id]==='done').length, total = isl.quests.filter(q => q.main).length; const d = document.createElement('div'); d.className = 'isl'+(lock?' lock':''); d.innerHTML = '<div class="ico">'+(lock?'🔒':(ISLAND_ICONS[i]||'❓'))+'</div><div class="nm">'+(i>=6&&lock?'Mystery Island #'+(i-5):isl.name)+'</div><div class="st">'+(lock?'Finish the previous island':'Quests: '+done+'/'+total)+'</div>'; if (!lock) d.onclick = () => { SFX.click(); startIsland(i); }; el.appendChild(d); }
+  const t = document.createElement('div'); t.className = 'isl'; t.style.borderColor = '#a855f7'; t.innerHTML = '<div class="ico">🗼</div><div class="nm">Sky Tower</div><div class="st">Endless course • best: '+(save.towerBest||0)+'</div>'; t.onclick = () => { SFX.click(); startTower(); }; el.appendChild(t);
+  $('menuLevel').textContent = 'Level '+playerLevel()+' • '+levelTitle(); $('menuSub').textContent = (save.name?'Hi '+save.name+'! ':'')+'Explore islands, help villagers, learn words!'; }
 function startIsland(i){ ensureAC(); fade(true); setTimeout(() => { loadIsland(i); buildHero(); $('ovMenu').classList.add('hide'); state = 'play'; fade(false); startMusic(0); showMsg(island.name, 2000); setTimeout(() => { if (!save.tutorial){ openDialog('Guide', [island.intro, 'Walk with WASD or the joystick. Jump with Space. Press E (or ✋) near a person to talk.', 'Look at the top-left: the arrow shows where to go. Good luck!'], () => { save.tutorial = true; persist(); }); } else openDialog('Guide', [island.intro]); }, 800); }, 400); }
-function toMenu(){ state = 'menu'; stopMusic(); closeDialog(); $('ovMenu').classList.remove('hide'); $('ovPause').classList.add('hide'); $('pQuests').classList.add('hide'); $('pShop').classList.add('hide'); renderIslands(); }
+function toMenu(){ if (towerMode){ towerExit(false); } state = 'menu'; stopMusic(); closeDialog(); $('ovMenu').classList.remove('hide'); $('ovPause').classList.add('hide'); $('pQuests').classList.add('hide'); $('pShop').classList.add('hide'); renderIslands(); }
 function askName(){ $('inName').value = save.name||''; $('ovName').classList.remove('hide'); $('ovMenu').classList.add('hide'); setTimeout(() => $('inName').focus(), 50); }
 function nameDone(){ const n = cleanName($('inName').value); if (!n){ $('inName').style.borderColor = '#ff4d4d'; return; } save.name = n; persist(); buildHero(); $('ovName').classList.add('hide'); $('ovMenu').classList.remove('hide'); renderIslands(); SFX.click(); }
 $('btnNameOk').onclick = nameDone; $('btnGift').onclick = () => { const r = redeemGift($('inGift').value); $('giftMsg').textContent = (r.ok?'🎉 ':'❌ ')+r.msg; $('giftMsg').style.color = r.ok?'#37d67a':'#ff6b6b'; if (r.ok){ SFX.chest(); $('inGift').value = ''; } else SFX.nope(); }; $('inGift').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') $('btnGift').onclick(); }); $('inName').addEventListener('keydown', e => { if (e.key === 'Enter') nameDone(); e.stopPropagation(); }); $('btnName').onclick = () => { SFX.click(); askName(); };
@@ -130,8 +132,8 @@ $('btnHard').onclick = () => { save.hard = !save.hard; persist(); SFX.click(); $
 
 // ---------- interactions ----------
 function nearest(list, r, fn){ let best = null, bd = r; for (const o of list){ const d = Math.hypot(o.x-P.x, o.z-P.z); if (d < bd && (!fn || fn(o))){ bd = d; best = o; } } return best; }
-function die(reason){ if (P.dead) return; if (riding){ const k = riding; riding = null; setTimeout(() => resetKart(k), 900); } P.dead = 0.9; SFX.die(); shake = 0.5; emit(P.x,P.y+1,P.z,30,{colors: reason==='water'?[0x9fd8ff,0xffffff,0x3fa9f5]:[0xff6b6b,0xffd43b],speed:8,g:12,life:0.9,size:1.3}); showMsg(reason==='water'?'Splash! 💦':'Ouch! 🔥', 900); }
-function respawn(){ const cp = checkpoints.filter(c => c.on).pop(); let s = P.safe; if (cp && P.onCourse) s = { x:cp.x, y:cp.y+0.1, z:cp.z }; P.x = s.x; P.y = s.y+0.5; P.z = s.z; P.vx = P.vy = P.vz = 0; P.dead = 0; P.onMover = null; P.boost = false; }
+function die(reason){ if (P.dead) return; if (towerMode){ if (towerMode.over) return; if (!towerDeath()) return; } if (riding){ const k = riding; riding = null; setTimeout(() => resetKart(k), 900); } P.dead = 0.9; SFX.die(); shake = 0.5; emit(P.x,P.y+1,P.z,30,{colors: reason==='water'?[0x9fd8ff,0xffffff,0x3fa9f5]:[0xff6b6b,0xffd43b],speed:8,g:12,life:0.9,size:1.3}); showMsg(reason==='water'?'Splash! 💦':'Ouch! 🔥', 900); }
+function respawn(){ const cp = checkpoints.filter(c => c.on).pop(); let s = P.safe; if (cp && (P.onCourse || towerMode)) s = { x:cp.x, y:cp.y+0.1, z:cp.z }; P.x = s.x; P.y = s.y+0.5; P.z = s.z; P.vx = P.vy = P.vz = 0; P.dead = 0; P.onMover = null; P.boost = false; }
 function enterKart(k){ riding = k; k.player = true; camYaw = k.yaw; SFX.click(); showMsg('🏎️ W = gas, S = brake, A/D = steer, Space = TURBO', 2500); }
 function exitKart(){ if (!riding) return; const k = riding; riding = null; k.player = false; raceAbort(); const rx = Math.cos(k.yaw), rz = -Math.sin(k.yaw); P.x = k.x + rx*2.2; P.z = k.z + rz*2.2; P.y = k.y + 0.2; P.vx = P.vy = P.vz = 0; k.speed = 0; }
 function resetKart(k){ k.x = k.home.x; k.y = k.home.y; k.z = k.home.z; k.yaw = k.home.yaw; k.speed = 0; k.vy = 0; k.g.position.set(k.x,k.y,k.z); k.g.rotation.set(0,k.yaw,0); }
@@ -144,15 +146,16 @@ function doAction(){
   const dr = nearest(triggers, 2.4, o => o.kind==='door'); if (dr){ enterRoom(dr); return; }
   const ex = nearest(triggers, 2.0, o => o.kind==='exit'); if (ex){ leaveRoom(ex); return; }
   const b = nearest(triggers, 4, o => o.kind==='boat'); if (b){ boatTalk(); return; }
+  const tw = nearest(triggers, 3, o => o.kind==='tower'); if (tw){ openDialog('Sky Tower', ['An endless tower of platforms! Each part is harder than the last.','You have 3 lives. Your score is the number of checkpoints you reach.','Best score: '+(save.towerBest||0)+'. Ready?'], null, { choices:[{label:'🗼 Climb!', fn:() => startTower()}, {label:'Not now', cls:'g', fn:() => {}}] }); return; }
 }
 let inRoom = null;
 function enterRoom(dr){ SFX.click(); gameEvent('house', {}); fade(true); setTimeout(() => { const r = dr.room; inRoom = r; P.x = r.cx; P.z = r.cz+3.2; P.y = 0.1; P.vx = P.vy = P.vz = 0; P.yaw = Math.PI; camYaw = Math.PI; P.safe = { x:P.x, y:0, z:P.z }; fade(false); showMsg('🏠 Inside', 1000); }, 350); }
 function leaveRoom(ex){ SFX.click(); fade(true); setTimeout(() => { const d = ex.door; inRoom = null; P.x = d.outX; P.z = d.outZ; P.y = 0.1; P.vx = P.vy = P.vz = 0; P.yaw = d.rot; camYaw = d.rot; P.safe = { x:P.x, y:0, z:P.z }; fade(false); }, 350); }
-function boatTalk(){ const md = mainDone(); const next = islandIdx+1 < ISLANDS.length; const choices = [];
-  if (md.done === md.total && next){ choices.push({ label:'⛵ Sail to '+ISLANDS[islandIdx+1].name, fn:() => { save.unlocked = Math.max(save.unlocked||1, islandIdx+2); persist(); travel(islandIdx+1); } }); }
-  for (let i=0;i<islandIdx;i++) choices.push({ label:'⛵ Back to '+ISLANDS[i].name, cls:'g', fn:() => travel(i) });
+function boatTalk(){ const md = mainDone(); const next = true; const choices = [];
+  if (md.done === md.total && next){ const nx = getIsland(islandIdx+1); choices.push({ label:'⛵ Sail to '+(nx.mystery?'Mystery Island #'+nx.k:nx.name), fn:() => { save.unlocked = Math.max(save.unlocked||1, islandIdx+2); persist(); travel(islandIdx+1); } }); }
+  for (let i=Math.max(0,islandIdx-3);i<islandIdx;i++) choices.push({ label:'⛵ Back to '+getIsland(i).name, cls:'g', fn:() => travel(i) }); if (islandIdx > 3) choices.push({ label:'⛵ Back to Sunny Island', cls:'g', fn:() => travel(0) });
   choices.push({ label:'Stay here', cls:'g', fn:() => {} });
-  const lines = md.done === md.total ? (next ? ['All main quests are done! The boat is ready.','Where do you want to sail?'] : ['You finished every island! You are the Island Hero! 🏆','Where do you want to sail?']) : ['The boat sails when all main quests are done.','Quests done: '+md.done+' / '+md.total+'. Keep helping the villagers!'];
+  const lines = md.done === md.total ? ['All main quests are done! The boat is ready.', islandIdx >= 5 ? 'Beyond the horizon there are endless Mystery Islands. Each one is harder!' : 'Where do you want to sail?'] : ['The boat sails when all main quests are done.','Quests done: '+md.done+' / '+md.total+'. Keep helping the villagers!'];
   openDialog('Captain Finn\'s Boat', lines, null, { choices }); }
 function travel(i){ fade(true); SFX.win(); setTimeout(() => { loadIsland(i); fade(false); showMsg('⛵ '+island.name, 2200); setTimeout(() => openDialog('Guide', [island.intro]), 800); }, 600); }
 
@@ -167,7 +170,7 @@ function upsertPeer(id, s){ let pr = peers.get(id); const name = cleanName(s.n)|
   pr.tx = s.x; pr.ty = typeof s.y==='number'?s.y:0; pr.tz = s.z; pr.tyaw = typeof s.yaw==='number'?s.yaw:0; pr.isl = s.i; pr.riding = !!s.r; }
 function dropPeer(id){ const pr = peers.get(id); if (!pr) return; scene.remove(pr.g); peers.delete(id); }
 function updatePeers(dt, t){ peers.forEach(pr => { const vis = pr.isl === islandIdx && state !== 'menu'; pr.g.visible = vis; if (!vis) return; const k = 1-Math.pow(0.0005,dt); const dx = pr.tx-pr.x, dz = pr.tz-pr.z; pr.x += dx*k; pr.y += (pr.ty-pr.y)*k; pr.z += dz*k; let dy = pr.tyaw-pr.yaw; dy = Math.atan2(Math.sin(dy),Math.cos(dy)); pr.yaw += dy*k; pr.g.position.set(pr.x,pr.y,pr.z); pr.g.rotation.y = pr.yaw; const sp = Math.hypot(dx,dz)*6; pr.walk += dt*Math.min(sp,7)*1.7; animChar(pr.P, t, { walk:pr.walk, speed:sp, sit:pr.riding }); });
-  if (myRef){ presT += dt; if (presT > 0.12){ presT = 0; const data = state==='play' ? { x:+P.x.toFixed(2), y:+P.y.toFixed(2), z:+P.z.toFixed(2), yaw:+P.yaw.toFixed(2), i:islandIdx, hd:save.eq.hoodie, cp:save.eq.cap, gl:!!save.eq.glasses, bp:!!save.eq.backpack, n:save.name||'Player', r:riding?1:0 } : { n:save.name||'Player', i:-1 }; const key = JSON.stringify(data); if (key !== lastSent || Math.random() < 0.05){ lastSent = key; data.t = firebase.database.ServerValue.TIMESTAMP; myRef.set(data).catch(() => {}); } } } }
+  if (myRef){ presT += dt; if (presT > 0.12){ presT = 0; const data = state==='play' ? { x:+P.x.toFixed(2), y:+P.y.toFixed(2), z:+P.z.toFixed(2), yaw:+P.yaw.toFixed(2), i:islandIdx, hd:save.eq.hoodie, cp:save.eq.cap, gl:!!save.eq.glasses, bp:!!save.eq.backpack, n:save.name||'Player', r:riding?1:0, lv:playerLevel() } : { n:save.name||'Player', i:-1 }; const key = JSON.stringify(data); if (key !== lastSent || Math.random() < 0.05){ lastSent = key; data.t = firebase.database.ServerValue.TIMESTAMP; myRef.set(data).catch(() => {}); } } } }
 
 // ---------- update ----------
 let trailT = 0, promptT = '', kartDist = 0, jumpCnt = 0;
@@ -178,9 +181,10 @@ function update(dt){
   const HF = hardFactor(); movers.forEach(m => { const ph = t*Math.PI*2*HF/m.period + m.phase; const nx = m.x0 + Math.sin(ph)*m.dx, nz = m.z0 + Math.sin(ph)*m.dz; m.vx = nx-m.x; m.vz = nz-m.z; m.x = nx; m.z = nz; m.m.position.set(nx, m.y, nz); });
   killers.forEach(k => { const ph = t*Math.PI*2*HF/k.period + k.phase; k.x = k.x0 + (Math.sin(ph)*0.5+0.5)*k.dx; k.m.position.set(k.x,k.y,k.z); });
   bars.forEach(b => { b.a += b.speed*HF*dt; b.g.rotation.y = b.a; });
+  blinkers.forEach(b => { const ph = ((t*HF/b.period) + b.phase) % 1; const solidNow = ph < 0.62; b.ghost = !solidNow; b.m.material.opacity = solidNow ? (ph > 0.5 ? 0.5 + Math.sin(t*30)*0.3 : 1) : 0.1; });
   items.forEach(it => { if (!it.got){ it.g.rotation.y = t*1.5 + it.x; it.g.position.y = it.y + Math.sin(t*3+it.x)*0.12; } });
   pads.forEach(p => p.a.position.y = p.y + 0.05 + Math.abs(Math.sin(t*4))*0.4);
-  triggers.forEach(tr => { if (tr.kind==='boat'){ tr.g.position.y = -0.5 + Math.sin(t*1.2+tr.g.userData.bob)*0.15; tr.g.rotation.z = Math.sin(t*0.9)*0.04; } });
+  triggers.forEach(tr => { if (tr.kind==='tower' && tr.ring){ tr.ring.rotation.y = t; tr.ring.position.y = 2.6+Math.sin(t*2)*0.2; } if (tr.kind==='boat'){ tr.g.position.y = -0.5 + Math.sin(t*1.2+tr.g.userData.bob)*0.15; tr.g.rotation.z = Math.sin(t*0.9)*0.04; } });
   lamps.forEach(l => { l.pl.intensity = 0.5; });
   const pa = ambGeo.attributes.position.array; for (let i=0;i<AMB_N;i++){ let x = pa[i*3], y = pa[i*3+1], z = pa[i*3+2]; if (theme && theme.amb==='snow'){ y -= dt*1.5; x += Math.sin(t+i)*dt*0.5; } else if (theme && theme.amb==='embers'){ y += dt*1.2; } else { y += Math.sin(t*0.7+i)*dt*0.4; x += Math.cos(t*0.5+i)*dt*0.4; } if (y < P.y-3) y = P.y+30; if (y > P.y+35) y = P.y-2; if (x < P.x-60) x += 120; if (x > P.x+60) x -= 120; if (z < P.z-60) z += 120; if (z > P.z+60) z -= 120; pa[i*3]=x; pa[i*3+1]=y; pa[i*3+2]=z; } ambGeo.attributes.position.needsUpdate = true;
   // npcs idle
@@ -195,12 +199,12 @@ function update(dt){
   if (dialog){ inputEv.jump = false; if (inputEv.action){ inputEv.action = false; dialogNext(); } animChar(HP, t, { walk:P.walk, speed:0, talk:false }); setPrompt(''); return; }
   if (inputEv.action){ inputEv.action = false; doAction(); if (dialog) return; }
   // prompts
-  let pr = ''; if (riding) pr = 'E / ✋ — get out'; else { const n = nearest(npcs, 3.2, o => o.cfg.name); const c = nearest(chests, 2.6, o => !o.opened); const k = nearest(karts, 3.5); const b = nearest(triggers, 4, o => o.kind==='boat'); const dr = nearest(triggers, 2.4, o => o.kind==='door'); const ex = nearest(triggers, 2.0, o => o.kind==='exit'); if (n) pr = 'E / ✋ — talk to '+n.cfg.name; else if (c) pr = 'E / ✋ — open chest'; else if (dr) pr = 'E / ✋ — enter the house'; else if (ex) pr = 'E / ✋ — go outside'; else if (k) pr = 'E / ✋ — drive the kart'; else if (b) pr = 'E / ✋ — the boat'; } setPrompt(pr);
+  let pr = ''; if (riding) pr = 'E / ✋ — get out'; else { const n = nearest(npcs, 3.2, o => o.cfg.name); const c = nearest(chests, 2.6, o => !o.opened); const k = nearest(karts, 3.5); const b = nearest(triggers, 4, o => o.kind==='boat'); const dr = nearest(triggers, 2.4, o => o.kind==='door'); const ex = nearest(triggers, 2.0, o => o.kind==='exit'); if (n) pr = 'E / ✋ — talk to '+n.cfg.name; else if (c) pr = 'E / ✋ — open chest'; else if (dr) pr = 'E / ✋ — enter the house'; else if (ex) pr = 'E / ✋ — go outside'; else if (k) pr = 'E / ✋ — drive the kart'; else if (b) pr = 'E / ✋ — the boat'; else if (nearest(triggers, 3, o => o.kind==='tower')) pr = 'E / ✋ — Sky Tower'; } setPrompt(pr);
   $('be').textContent = riding ? '⬅' : pr ? '✋' : '✋'; $('btnDecor').style.display = (myHouse && inRoom === myHouse.room) ? 'inline-block' : 'none';
   // items near: show labels
   items.forEach(it => { if (it.lbl){ const d = Math.hypot(it.x-P.x, it.z-P.z); it.lbl.visible = !it.got && d < 8; } });
   // objective
-  const ob = inRoom ? { text:'Inside a house — go to the door to leave', x:inRoom.exit.x, z:inRoom.exit.z } : objective(); $('objText').textContent = ob.text; const ang = Math.atan2(ob.x-P.x, ob.z-P.z) - camYaw; $('compass').style.transform = 'rotate('+(-(ang)*180/Math.PI + 180)+'deg)';
+  const ob = towerMode ? { text:'Sky Tower • score '+towerMode.score+' • ❤️ '+towerMode.lives, x:P.x, z:P.z-50 } : inRoom ? { text:'Inside a house — go to the door to leave', x:inRoom.exit.x, z:inRoom.exit.z } : objective(); $('objText').textContent = ob.text; const ang = Math.atan2(ob.x-P.x, ob.z-P.z) - camYaw; $('compass').style.transform = 'rotate('+(-(ang)*180/Math.PI + 180)+'deg)';
 
   updateCoop(dt); $('hSecrets').textContent = '🌟 '+secretCount(islandIdx)+'/20';
   if (riding){ updateKart(riding, dt, t); return; }
@@ -210,7 +214,7 @@ function update(dt){
   const mx = (cv.rx*mv.ix - cv.fx*mv.iz)*SPEED, mz = (cv.rz*mv.ix - cv.fz*mv.iz)*SPEED;
   const fr = theme.amb==='snow' && P.ground && !(P.groundBlock && P.groundBlock.isMover) ? 0.1 : P.ground ? 0.25 : 0.08; P.vx += (mx-P.vx)*fr; P.vz += (mz-P.vz)*fr;
   if (mv.l > 0.1) P.yaw = Math.atan2(mx, mz);
-  const G = theme.gravity||28, JV = Math.sqrt(2*G*(G < 28 ? 4.2 : 2.2)); const maxJumps = hardMode() ? 1 : (save.eq.wings ? 3 : 2);
+  const G = gravityOverride||theme.gravity||28, JV = Math.sqrt(2*G*(G < 28 ? 4.2 : 2.2)); const maxJumps = hardMode() ? 1 : (save.eq.wings ? 3 : 2);
   P.jumpBuf = inputEv.jump ? 0.15 : Math.max(0, P.jumpBuf-dt); inputEv.jump = false; P.coyote = P.ground ? 0.12 : P.coyote - dt;
   if (P.jumpBuf > 0 && P.coyote > 0){ P.vy = JV; P.ground = false; P.coyote = 0; P.jumpBuf = 0; P.jumps = 1; SFX.jump(); emit(P.x,P.y,P.z,8,{colors:[0xffffff,0xdddddd],speed:3,g:6,life:0.4,spread:0.8}); if (++jumpCnt >= 5){ gameEvent('jump', { n: jumpCnt }); jumpCnt = 0; } }
   else if (P.jumpBuf > 0 && !P.ground && P.jumps < maxJumps && P.jumps > 0){ P.vy = JV*0.95; P.jumps++; P.jumpBuf = 0; SFX.djump(); emit(P.x,P.y+0.5,P.z,16,{colors:[0xaaddff,0xffffff],speed:5,g:3,life:0.6,spread:1}); }
@@ -229,7 +233,7 @@ function update(dt){
   // pickups
   for (const it of items){ if (!it.got && Math.hypot(P.x-it.x, P.z-it.z) < it.r && Math.abs((P.y+0.9)-it.y) < 2.2){ it.got = true; it.g.visible = false; if (it.kind === 'coin'){ addCoins(1); SFX.coin(); } else if (it.kind === 'secret'){ onSecret(it); } else { addInv(it.kind); SFX.item(); showMsg(ITEM_EMOJI[it.kind]+' '+it.kind+' ('+inv(it.kind)+')', 1200); gameEvent('item', {}); } persist(); hud(); emit(it.x,it.y,it.z,12,{colors:[0xffd43b,0xfff3b0,0xffffff],speed:4,g:4,life:0.6}); } }
   // checkpoints & finish
-  for (const c of checkpoints) if (!c.on && Math.abs(P.x-c.x) < 1.6 && Math.abs(P.z-c.z) < 1.6 && Math.abs(P.y-c.y) < 1.2){ c.on = true; c.flag.material = mat(0x37d67a,{emissive:0x0a5a2a,emissiveIntensity:0.5}); SFX.check(); emit(c.x,c.y+1,c.z,25,{colors:[0x37d67a,0xffffff],speed:5,g:3,life:1}); if (c.n > 0) showMsg('Checkpoint '+c.n+' ✅', 1200); else courseStart(c.course); }
+  for (const c of checkpoints) if (!c.on && Math.abs(P.x-c.x) < 1.6 && Math.abs(P.z-c.z) < 1.6 && Math.abs(P.y-c.y) < 1.2){ c.on = true; c.flag.material = mat(0x37d67a,{emissive:0x0a5a2a,emissiveIntensity:0.5}); SFX.check(); emit(c.x,c.y+1,c.z,25,{colors:[0x37d67a,0xffffff],speed:5,g:3,life:1}); if (towerMode) towerPassed(c.n); else if (c.n > 0) showMsg('Checkpoint '+c.n+' ✅', 1200); else courseStart(c.course); }
   for (const f of courseFinish) if (Math.abs(P.x-f.x) < 2.2 && Math.abs(P.z-f.z) < 2.2 && Math.abs(P.y-f.y) < 2){ const q = activeQuests().find(q => q.type==='course' && q.target===f.id); const cres = (!f.cheer || t-f.cheer > 5) ? courseFinished(f.id) : null; if (q){ SFX.win(); emit(P.x,P.y+2,P.z,60,{colors:[0xff4d88,0xffd43b,0x37d67a,0x3498db,0xffffff],speed:7,g:5,life:2,size:1.3,up:1.5}); const n = npcById(q.npc); openDialog(n.cfg.name, q.lines.done, () => { completeQuest(q); P.x = n.x+2; P.z = n.z+2; P.y = 0.5; P.safe = {x:P.x,y:0,z:P.z}; }); } else if (!f.cheer || t-f.cheer > 5){ f.cheer = t; if (!cres) showMsg('🏁 Finish!', 1500); checkpoints.forEach(c => { c.on = false; c.flag.material = mat(0xcccccc); }); } }
   // hide & seek proximity
   activeQuests().filter(q => q.type==='hide').forEach(q => { const n = npcById(q.npc); if (n.hideIdx >= 0 && Math.hypot(P.x-n.x,P.z-n.z) < 3.5 && !dialog){ hideFound(q, n); } });
@@ -241,7 +245,7 @@ function updateKart(k, dt, t){
   const mv = readMove(); const ix = clamp(mv.ix,-1,1), iz = clamp(mv.iz,-1,1); const nitro = (keys.Space||jumpBtn) && iz < 0; const maxV = 18*(nitro?1.5:1);
   if (iz < 0) k.speed += 14*dt*(nitro?1.6:1); else if (iz > 0) k.speed -= (k.speed > 0 ? 22 : 8)*dt; else k.speed *= Math.pow(0.3, dt); k.speed = clamp(k.speed, -7, maxV);
   k.yaw += -ix*2.2*dt*clamp(k.speed/8,-1,1); const fx = -Math.sin(k.yaw), fz = -Math.cos(k.yaw);
-  k.vy -= (theme.gravity||28)*dt; k.launchCd -= dt; const e = { x:k.x, y:k.y, z:k.z, w:k.w, h:k.h, vx:fx*k.speed, vy:k.vy, vz:fz*k.speed, ground:false, onMover:k.onMover, bumped:false };
+  k.vy -= (gravityOverride||theme.gravity||28)*dt; k.launchCd -= dt; const e = { x:k.x, y:k.y, z:k.z, w:k.w, h:k.h, vx:fx*k.speed, vy:k.vy, vz:fz*k.speed, ground:false, onMover:k.onMover, bumped:false };
   moveEntity(e, dt, { step:0.5 }); if (e.bumped && Math.abs(k.speed) > 4){ k.speed *= -0.3; shake = 0.2; SFX.land(); } k.x = e.x; k.y = e.y; k.z = e.z; k.vy = e.vy; k.ground = e.ground; k.onMover = e.onMover;
   for (const r of ramps){ if (k.ground && k.launchCd <= 0 && Math.abs(k.x-r.x) < r.w/2 && Math.abs(k.z-r.z) < 1 && Math.abs(k.y-r.top) < 0.4 && k.speed > 6){ k.vy = Math.min(9, 3+k.speed*0.25); k.ground = false; k.launchCd = 1; SFX.pad(); emit(k.x,k.y,k.z,30,{colors:[0xffd43b,0xffffff],speed:6,g:8,life:0.7,spread:2}); } }
   k.g.position.set(k.x,k.y,k.z); k.g.rotation.y = k.yaw; k.g.rotation.z = lerp(k.g.rotation.z, -ix*0.08*clamp(k.speed/10,0,1), 0.2); k.wheels.forEach((w,i) => { w.rotation.x += k.speed*dt*2.2; if (i < 2) w.rotation.y = -ix*0.5; });

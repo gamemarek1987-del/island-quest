@@ -11,7 +11,7 @@ const THEMES = {
   space: { name:'Space Station', grass:0x3b4160, grass2:0x2f3450, dirt:0x1f2238, sand:0x3b4160, rock:0x4a5070, water:0x05060f, sky:[0x02030a,0x0a1030,0x1a1050], fog:0x0a1030, leaf:[0x00f5d4,0xf15bb5,0xfee440], trunk:0x8899aa, amb:'stars', decor:'antenna', gravity:16, neon:true, palette:[0x00f5d4,0xf15bb5,0xfee440,0x9b5de5,0x00bbf9] },
   jungle:{ name:'Volcano Jungle', grass:0x3fae4a, grass2:0x2f8f3c, dirt:0x6b4a2a, sand:0x2d2d2d, rock:0x5a4a4a, water:0x1f8fcf, sky:[0xff8c42,0xffc27a,0xfff0d0], fog:0xffd9b0, leaf:[0x2ecc71,0x1e9e5a,0x7fe04a,0x16a34a], trunk:0x6b4a2a, amb:'embers', decor:'palm' },
 };
-function clearWorld(){ groundLayer = 0; interiorCount = 0; while (world.children.length){ const c = world.children.pop(); } blocks.length = 0; [movers,bars,pads,killers,hazards,items,npcs,chests,signs,karts,ramps,lamps,waters,triggers].forEach(a => a.length = 0); checkpoints = []; courseFinish = []; }
+function clearWorld(){ groundLayer = 0; interiorCount = 0; while (world.children.length){ const c = world.children.pop(); } blocks.length = 0; [movers,bars,pads,killers,hazards,items,npcs,chests,signs,karts,ramps,lamps,waters,triggers,blinkers].forEach(a => a.length = 0); checkpoints = []; courseFinish = []; }
 function setTheme(t){ theme = THEMES[t]; skyMat.uniforms.top.value.set(theme.sky[0]); skyMat.uniforms.mid.value.set(theme.sky[1]); skyMat.uniforms.bot.value.set(theme.sky[2]); scene.fog.color.set(theme.fog); seaMat.color.set(theme.water); ambMat.color.set(theme.amb==='snow'?0xffffff:theme.amb==='embers'?0xffaa33:0xffffaa); ambMat.size = theme.amb==='snow'?0.3:0.18; }
 const W = (geo, m, x,y,z) => mesh(geo, m, x,y,z, world);
 // ---- terrain pieces (collidable) ----
@@ -101,21 +101,24 @@ function mover(x,y,z,w,d,dx,dz,period,phase=0){ const m = W(rgeo(w,1,d,0.25), ma
 function spinner(x,y,z,len,speed){ const g = new THREE.Group(); const b = mesh(rgeo(len,0.7,0.7,0.2), mat(0xef4444,{emissive:0x550000,emissiveIntensity:0.6}), 0,0,0, g); const hub = cyl(0.5,0.5,1.6,mat(0x374151),0,0.3,0,g,12); g.position.set(x,y+0.4,z); world.add(g); bars.push({ x,y:y+0.4,z,len,speed,g,a:R()*6 }); }
 function killerBlock(x,y,z,w,h,d,dx,dz,period,phase){ const m = W(rgeo(w,h,d,0.15), mat(0xef4444,{emissive:0x880000,emissiveIntensity:0.7}), x,y,z); killers.push({ x,y,z,w,h,d,m,x0:x,z0:z,dx,dz,period,phase }); }
 function finishGate(x,y,z,id){ [-2,2].forEach(ex => cyl(0.15,0.15,4,mat(0xffd43b),x+ex,y+2,z,world,8)); mesh(bgeo(4.3,0.5,0.3), mat(0xffd43b), x,y+4,z, world); const sp = textSprite('FINISH','#ffffff',0.9); sp.position.set(x,y+4.9,z); world.add(sp); W(rgeo(4,0.2,2,0.1), mat(0xffffff), x,y+0.1,z); courseFinish.push({ x,y,z,id }); }
-// course generator: start at (x0,z0) heading -z at height y0
-function course(id, x0, y0, z0, segs){ let cx = x0, cz = z0, cy = y0, i = 0; const pal = [0x3498db,0x9b59b6,0xf39c12,0x1abc9c,0xe74c3c,0x2ecc71];
-  platformBlock(cx,cy,cz-3,6,6,0x7ed957,1.4); cpPad(cx,cy,cz-3,0,id); cz -= 6;
-  for (const [type,p] of segs){ const land = () => { platformBlock(cx,cy,cz-3,6,6,0x7ed957,1.4); cpPad(cx,cy,cz-3,++i,id); cz -= 6; };
-    if (type==='gaps'){ for (let k=0;k<(p.n||5);k++){ const size = p.size||3, gap = p.gap||2.6; const c = cz-gap-size/2; const ox = (R()-.5)*2; platformBlock(cx+ox,cy,c,size,size,pal[k%6]); if (k%2) items.push({ kind:'coin', x:cx+ox, y:cy+1.2, z:c }); cz = c-size/2; } land(); }
-    else if (type==='movers'){ for (let k=0;k<(p.n||3);k++){ cz -= 5.5; if (k%2===0) mover(cx,cy,cz-1.5,3,3,0,2.5,4,k); else mover(cx,cy,cz-1.5,3,3,4,0,5,k); cz -= 3+(k%2===0?2.5:0); } cz -= 1; land(); }
-    else if (type==='spinner'){ const L = 12; platformBlock(cx,cy,cz-L/2,12,L,pal[3],1.4); spinner(cx,cy,cz-6,11,p.speed||1.6); items.push({kind:'coin',x:cx+4.5,y:cy+1.2,z:cz-6}); items.push({kind:'coin',x:cx-4.5,y:cy+1.2,z:cz-6}); cz -= L; land(); }
-    else if (type==='stairs'){ for (let k=0;k<(p.n||8);k++){ const x = cx+(k%2?2.5:-2.5); cz -= 3.5; cy += p.rise||1.2; platformBlock(x,cy,cz,3,3,pal[(k+2)%6]); if (k%3===2) items.push({kind:'coin',x,y:cy+1.2,z:cz}); } cz -= 2.5; land(); }
-    else if (type==='pads'){ for (let k=0;k<(p.n||2);k++){ cz -= 1; platformBlock(cx,cy,cz-2,4,4,pal[2]); bouncePad(cx,cy,cz-2); items.push({kind:'coin',x:cx,y:cy+4.5,z:cz-2-5.5}); cz -= 11; } cz -= 1; land(); }
-    else if (type==='beams'){ const len = p.len||14; cz -= 1; platformBlock(cx,cy,cz-len/2,1,len,pal[4]); items.push({kind:'coin',x:cx,y:cy+1.2,z:cz-len/2}); cz -= len+1; platformBlock(cx+3,cy,cz-0.5,7,1,pal[4]); platformBlock(cx+6,cy,cz-len/2-0.5,1,len,pal[4]); cz -= len+1; cx += 6; land(); }
-    else if (type==='pistons'){ const len = p.len||18, n = p.n||3; const z0 = cz; platformBlock(cx,cy,z0-len/2,4,len,pal[0],1.4); for (let k=0;k<n;k++){ const z = z0-3-k*((len-6)/(n-1||1)); killerBlock(cx-4,cy+0.6,z,1.2,1.2,1.5,8,0,p.period||2.6,k*0.9); platformBlock(cx-4,cy,z,1.5,1.5,0x555555); } cz = z0-len; land(); }
-    else if (type==='shrink'){ for (let k=0;k<(p.n||6);k++){ const w = Math.max(1.3,3-k*0.3); const c = cz-(p.gap||3)-w/2; platformBlock(cx,cy,c,w,w,pal[(k+1)%6]); items.push({kind:'coin',x:cx,y:cy+1.2,z:c}); cz = c-w/2; } land(); }
-  }
-  platformBlock(cx,cy,cz-5,10,10,0x7ed957,1.4); finishGate(cx,cy,cz-5,id); return { x:x0, z:z0 };
-}
+// course generator (state-based so the Sky Tower can extend it endlessly)
+const COURSE_PAL = [0x3498db,0x9b59b6,0xf39c12,0x1abc9c,0xe74c3c,0x2ecc71];
+function courseState(id, x0, y0, z0, diff=1){ return { id, cx:x0, cy:y0, cz:z0, i:0, diff }; }
+function courseLand(S){ platformBlock(S.cx,S.cy,S.cz-3,6,6,0x7ed957,1.4); cpPad(S.cx,S.cy,S.cz-3,S.i++,S.id); S.cz -= 6; }
+function courseSeg(S, type, p={}){ const pal = COURSE_PAL; const D = S.diff||1; let cx = S.cx, cy = S.cy, cz = S.cz;
+  if (type==='gaps'){ const n = p.n||5; for (let k=0;k<n;k++){ const size = Math.max(1.6,(p.size||3) - (D-1)*0.15), gap = Math.min(4.6,(p.gap||2.6) + (D-1)*0.2); const c = cz-gap-size/2; const ox = (R()-.5)*2*Math.min(2,D); platformBlock(cx+ox,cy,c,size,size,pal[k%6]); if (k%2) items.push({ kind:'coin', x:cx+ox, y:cy+1.2, z:c }); cz = c-size/2; } }
+  else if (type==='movers'){ const n = p.n||3; for (let k=0;k<n;k++){ cz -= 5.5; const per = Math.max(2.2, 4 - (D-1)*0.25); if (k%2===0) mover(cx,cy,cz-1.5,3,3,0,2.5+Math.min(2,D*0.3),per,k); else mover(cx,cy,cz-1.5,3,3,4+Math.min(3,D*0.4),0,per+1,k); cz -= 3+(k%2===0?2.5:0); } cz -= 1; }
+  else if (type==='spinner'){ const L = 12; platformBlock(cx,cy,cz-L/2,12,L,pal[3],1.4); spinner(cx,cy,cz-6,11,(p.speed||1.6)+(D-1)*0.25); if (D >= 4) spinner(cx,cy+2.6,cz-6,9,-(p.speed||1.6)); items.push({kind:'coin',x:cx+4.5,y:cy+1.2,z:cz-6}); items.push({kind:'coin',x:cx-4.5,y:cy+1.2,z:cz-6}); cz -= L; }
+  else if (type==='stairs'){ const n = p.n||8; for (let k=0;k<n;k++){ const x = cx+(k%2?2.5:-2.5); cz -= 3.5; cy += p.rise||1.2; platformBlock(x,cy,cz,Math.max(1.8,3-(D-1)*0.15),3,pal[(k+2)%6]); if (k%3===2) items.push({kind:'coin',x,y:cy+1.2,z:cz}); } cz -= 2.5; }
+  else if (type==='pads'){ const n = p.n||2; for (let k=0;k<n;k++){ cz -= 1; platformBlock(cx,cy,cz-2,4,4,pal[2]); bouncePad(cx,cy,cz-2); items.push({kind:'coin',x:cx,y:cy+4.5,z:cz-2-5.5}); cz -= (p.dist||11); } cz -= 1; }
+  else if (type==='beams'){ const len = p.len||14; const bw = Math.max(0.7, 1-(D-1)*0.05); cz -= 1; platformBlock(cx,cy,cz-len/2,bw,len,pal[4]); items.push({kind:'coin',x:cx,y:cy+1.2,z:cz-len/2}); cz -= len+1; platformBlock(cx+3,cy,cz-0.5,7,bw,pal[4]); platformBlock(cx+6,cy,cz-len/2-0.5,bw,len,pal[4]); cz -= len+1; cx += 6; }
+  else if (type==='pistons'){ const len = p.len||18, n = p.n||3; const z0 = cz; platformBlock(cx,cy,z0-len/2,4,len,pal[0],1.4); for (let k=0;k<n;k++){ const z = z0-3-k*((len-6)/(n-1||1)); killerBlock(cx-4,cy+0.6,z,1.2,1.2,1.5,8,0,Math.max(1.4,(p.period||2.6)-(D-1)*0.2),k*0.9); platformBlock(cx-4,cy,z,1.5,1.5,0x555555); } cz = z0-len; }
+  else if (type==='shrink'){ const n = p.n||6; for (let k=0;k<n;k++){ const w = Math.max(1.1,3-k*0.3-(D-1)*0.1); const c = cz-(p.gap||3)-w/2; platformBlock(cx,cy,c,w,w,pal[(k+1)%6]); items.push({kind:'coin',x:cx,y:cy+1.2,z:c}); cz = c-w/2; } }
+  else if (type==='blink'){ const n = p.n||5; for (let k=0;k<n;k++){ cz -= 3.7; const b = platformBlock(cx+(R()-.5)*2,cy,cz,3,3,pal[3]); const sb = blocks[blocks.length-1]; sb.blink = true; sb.period = Math.max(1.6, 2.6-(D-1)*0.15); sb.phase = k*0.55; sb.m = b; b.material = b.material.clone(); b.material.transparent = true; blinkers.push(sb); cz -= 1.5; } cz -= 1; }
+  S.cx = cx; S.cy = cy; S.cz = cz; }
+function courseEnd(S){ platformBlock(S.cx,S.cy,S.cz-5,10,10,0x7ed957,1.4); finishGate(S.cx,S.cy,S.cz-5,S.id); }
+function course(id, x0, y0, z0, segs, diff=1){ const S = courseState(id, x0, y0, z0, diff); courseLand(S); S.i = 1; for (const [type,p] of segs){ courseSeg(S, type, p); courseLand(S); } courseEnd(S); return { x:x0, z:z0 }; }
+const blinkers = [];
 // ---- island assembly ----
 function spawnItem(kind, x, z, y=0, extra){ items.push(Object.assign({ kind, x, y: y+0.6, z }, extra||{})); }
 function spawnNPC(id, x, z, yaw, cfg, y=0){ const g = new THREE.Group(); g.position.set(x,y,z); g.rotation.y = yaw; world.add(g); let P; if (cfg.animal) P = buildAnimal(g, cfg.animal, cfg.name); else P = buildChar(g, Object.assign({ nameColor:'#aee8ff' }, cfg)); const n = { id, x, y, z, yaw, g, P, cfg, home:{x,z}, talkT:0 }; npcs.push(n); if (!cfg.noCollide) solid(x,y+0.9,z,0.9,1.8,0.9,{ghost:true}); return n; }
