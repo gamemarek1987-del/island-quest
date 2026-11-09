@@ -16,6 +16,7 @@
   html, body { height: 100%; background: #07101f; overflow: hidden; font-family: "Fredoka", "Segoe UI", Arial, sans-serif; color: #fff; touch-action: none; user-select: none; -webkit-user-select: none; }
   canvas { display: block; }
   #hud { position: fixed; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; align-items: flex-start; pointer-events: none; font-weight: 700; font-size: 16px; text-shadow: 0 2px 0 rgba(0,0,0,.6); }
+  .pill.on { background: #37d67a; color: #073; }
   .pill { background: rgba(0,0,0,.45); padding: 6px 12px; border-radius: 12px; backdrop-filter: blur(4px); margin: 2px; display: inline-block; }
   .btn { pointer-events: auto; cursor: pointer; }
   #obj { max-width: 420px; }
@@ -74,6 +75,10 @@
   .it .ic { font-size: 28px; } .it .n { font-weight: 700; font-size: 13px; } .it .pr { font-size: 12px; color: #ffd43b; }
   .tabs { display: flex; gap: 6px; margin: 8px 0; flex-wrap: wrap; } .tabs button { font-size: 14px; padding: 7px 12px; } .tabs button.act { background: #ffd43b; color: #5a3a00; box-shadow: 0 5px 0 #b8860b; }
   .words { display: flex; flex-wrap: wrap; gap: 6px; } .w { background: #ffd43b; color: #5a3a00; padding: 4px 10px; border-radius: 10px; font-weight: 700; }
+  #chatLog { position: fixed; left: 12px; bottom: 160px; width: min(340px, 60%); font-size: 14px; text-shadow: 0 1px 0 #000; pointer-events: none; opacity: .35; transition: opacity .3s; z-index: 4; } .touch #chatLog { bottom: 170px; }
+  .cl { background: rgba(0,0,0,.45); border-radius: 10px; padding: 4px 8px; margin: 3px 0; } .cl.me b { color: #ffd43b; } .cl b { color: #7fe0ff; }
+  #pChat { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); width: min(640px, 94%); background: rgba(10,20,45,.96); border: 4px solid #7fe0ff; border-radius: 18px; padding: 12px 14px; z-index: 7; }
+  #pChat.hide { display: none; } #pChat button.y.sm { font-size: 14px; padding: 7px 10px; }
   #fade { position: fixed; inset: 0; background: #000; pointer-events: none; opacity: 0; transition: opacity .4s; z-index: 9; }
   #vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,.35) 100%); }
   .kbd { display: inline-block; background: #0a1526; border: 1px solid #4a5f8a; border-radius: 6px; padding: 1px 7px; font-size: 13px; }
@@ -83,13 +88,15 @@
 <div id="vignette"></div>
 <div id="hud">
   <div><span class="pill" id="hIsland">Sunny Island</span><br><span class="pill" id="obj"><svg id="compass" viewBox="0 0 24 24"><path d="M12 2 L18 20 L12 15 L6 20 Z" fill="#ffd43b" stroke="#000" stroke-width="1.5"/></svg><span id="objText">Talk to the villagers</span></span></div>
-  <div style="text-align:right"><span class="pill" id="hLevel">Lv 1</span><span class="pill" id="hCoins">🪙 0</span><span class="pill" id="hWords">📖 0</span><span class="pill" id="hSecrets">🌟 0/20</span><span class="pill" id="hOnline" style="display:none"></span><span class="pill" id="raceHud" style="display:none"></span><br><span class="pill btn" id="btnQuests">📜 Quests</span><span class="pill btn" id="btnDaily">📅 Daily</span><span class="pill btn" id="btnShop">🛒 Shop</span><span class="pill btn" id="btnTrophy">🏆</span><span class="pill btn" id="btnBoard">📊</span><span class="pill btn" id="btnDecor" style="display:none;background:#7c3aed">🛋️ Decorate</span><span class="pill btn" id="btnMenu">☰</span></div>
+  <div style="text-align:right"><span class="pill" id="hLevel">Lv 1</span><span class="pill" id="hCoins">🪙 0</span><span class="pill" id="hWords">📖 0</span><span class="pill" id="hSecrets">🌟 0/20</span><span class="pill" id="hOnline" style="display:none"></span><span class="pill" id="raceHud" style="display:none"></span><br><span class="pill btn" id="btnChat">💬</span><span class="pill btn" id="btnVoice" title="Voice chat">🎤</span><span class="pill btn" id="btnQuests">📜 Quests</span><span class="pill btn" id="btnDaily">📅 Daily</span><span class="pill btn" id="btnShop">🛒 Shop</span><span class="pill btn" id="btnTrophy">🏆</span><span class="pill btn" id="btnBoard">📊</span><span class="pill btn" id="btnDecor" style="display:none;background:#7c3aed">🛋️ Decorate</span><span class="pill btn" id="btnMenu">☰</span></div>
 </div>
 <div id="prompt"><span id="promptText"></span></div>
 <div id="msg"></div>
 <div id="joy"><div id="knob"></div></div>
 <div class="tbtn" id="bj">JUMP</div>
 <div class="tbtn" id="be">✋</div>
+<div id="chatLog"></div>
+<div id="pChat" class="hide"><div class="row" style="justify-content:space-between;align-items:center"><b>💬 Chat</b><span><button class="g sm" id="btnMute">🔇 Mute mic</button><button class="g sm" id="btnChatClose">✖</button></span></div><div id="quickChat" class="row" style="justify-content:flex-start;margin:8px 0"></div><div class="row" style="justify-content:flex-start"><input id="chatInput" maxlength="60" placeholder="Type a message in English..." style="flex:1;text-align:left;font-size:16px;width:auto"><button class="sm" id="btnChatSend">Send ➤</button></div></div>
 <div id="fade"></div>
 
 <div id="dlg" class="hide"><div id="dlgName"></div><div id="dlgText"></div><div id="dlgBtns"></div></div>
@@ -101,7 +108,7 @@
   <p id="menuSub">Endless islands, quests and challenges!</p><p id="menuLevel" style="color:#ffd43b;font-weight:700"></p>
   <div class="islands" id="islands"></div>
   <div class="row"><button class="g sm" id="btnName">👤 Player</button><button class="g sm" id="btnSound">🔊 Sound</button><button class="g sm" id="btnHard">🔥 Hard mode: OFF</button></div>
-  <p style="font-size:13px;color:#9fb3d9">PC: <span class="kbd">W A S D</span> move • <span class="kbd">Space</span> jump (2× double) • <span class="kbd">E</span> talk / use • mouse – camera • <span class="kbd">Q</span> quests<br>Tablet: left – joystick, right – camera, JUMP and ✋ buttons</p>
+  <p style="font-size:13px;color:#9fb3d9">PC: <span class="kbd">W A S D</span> move • <span class="kbd">Space</span> jump (2× double) • <span class="kbd">E</span> talk / use • <span class="kbd">T</span> chat • mouse – camera • <span class="kbd">Q</span> quests<br>Tablet: left – joystick, right – camera, JUMP and ✋ buttons</p>
 </div></div>
 <div class="ov hide" id="ovName"><div class="card"><h2>👤 Your name</h2><p>What is your name? It will show above your character.</p><input id="inName" maxlength="14" placeholder="e.g. Szymon"><div class="row" style="margin-top:12px"><button id="btnNameOk">✅ OK</button></div><p style="margin-top:14px">🎁 Gift code</p><input id="inGift" maxlength="24" placeholder="ISLAND-...."><div class="row" style="margin-top:8px"><button class="y sm" id="btnGift">Redeem 🎁</button></div><p id="giftMsg" style="min-height:18px"></p></div></div>
 <div class="ov hide" id="ovPause"><div class="card"><h2>⏸ Paused</h2><div class="row"><button id="btnResume">▶ Continue</button><button class="g" id="btnQuit">🏠 Menu</button></div></div></div>

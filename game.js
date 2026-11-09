@@ -128,6 +128,7 @@ $('btnDaily').onclick = () => { if (state!=='play') return; SFX.click(); const w
 $('btnTrophy').onclick = () => { if (state!=='play') return; SFX.click(); const was = $('pTrophy').classList.contains('hide'); closeAll(); if (was){ renderTrophies(); $('pTrophy').classList.remove('hide'); } }; $('btnTClose').onclick = closeAll;
 $('btnBoard').onclick = () => { if (state!=='play') return; SFX.click(); const was = $('pBoard').classList.contains('hide'); closeAll(); if (was){ renderBoard(); $('pBoard').classList.remove('hide'); } }; $('btnBClose').onclick = closeAll;
 $('btnDecor').onclick = () => { if (state!=='play') return; SFX.click(); const was = $('pDecor').classList.contains('hide'); closeAll(); if (was){ renderDecor(); $('pDecor').classList.remove('hide'); } }; $('btnDecClose').onclick = closeAll;
+$('btnChat').onclick = () => { if (state!=='play') return; SFX.click(); if ($('pChat').classList.contains('hide')) openChat(); else closeChat(); }; $('btnChatClose').onclick = closeChat; $('btnVoice').onclick = () => { if (state!=='play') return; voiceToggle(); }; $('btnMute').onclick = () => voiceMute(); $('btnChatSend').onclick = () => { sendChat($('chatInput').value); $('chatInput').value = ''; closeChat(); }; $('chatInput').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') $('btnChatSend').onclick(); if (e.key === 'Escape') closeChat(); });
 $('btnHard').onclick = () => { save.hard = !save.hard; persist(); SFX.click(); $('btnHard').textContent = save.hard ? '🔥 Hard mode: ON' : '🔥 Hard mode: OFF'; }; $('btnHard').textContent = save.hard ? '🔥 Hard mode: ON' : '🔥 Hard mode: OFF'; $('btnResume').onclick = () => { state = 'play'; $('ovPause').classList.add('hide'); }; $('btnQuit').onclick = toMenu;
 
 // ---------- interactions ----------
@@ -167,10 +168,10 @@ let fdb = null, myRef = null, uid = null; const peers = new Map(); let presT = 0
 function upsertPeer(id, s){ let pr = peers.get(id); const name = cleanName(s.n)||'Player'; const key = [s.hd,s.cp,s.gl,s.bp,name].join('|');
   if (!pr){ const g = new THREE.Group(); scene.add(g); pr = { g, P:null, key:'', x:s.x, y:s.y||0, z:s.z, yaw:s.yaw||0, tx:s.x, ty:s.y||0, tz:s.z, tyaw:s.yaw||0, isl:s.i, walk:0 }; peers.set(id, pr); }
   if (pr.key !== key){ pr.key = key; pr.P = buildChar(pr.g, { hoodie: HOODIES[s.hd]||0xffd43b, cap: CAPS[s.cp]===undefined?0xef4444:CAPS[s.cp], capBack:true, sunglasses:!!s.gl, backpack:!!s.bp, name, nameColor:'#7fe0ff' }); }
-  pr.tx = s.x; pr.ty = typeof s.y==='number'?s.y:0; pr.tz = s.z; pr.tyaw = typeof s.yaw==='number'?s.yaw:0; pr.isl = s.i; pr.riding = !!s.r; }
-function dropPeer(id){ const pr = peers.get(id); if (!pr) return; scene.remove(pr.g); peers.delete(id); }
+  pr.tx = s.x; pr.ty = typeof s.y==='number'?s.y:0; pr.tz = s.z; pr.tyaw = typeof s.yaw==='number'?s.yaw:0; pr.isl = s.i; pr.riding = !!s.r; pr.voice = !!s.v; peerChat(pr, s); if (voice) voiceConnect(); }
+function dropPeer(id){ const pr = peers.get(id); if (!pr) return; scene.remove(pr.g); peers.delete(id); if (voice) voiceDrop(id); }
 function updatePeers(dt, t){ peers.forEach(pr => { const vis = pr.isl === islandIdx && state !== 'menu'; pr.g.visible = vis; if (!vis) return; const k = 1-Math.pow(0.0005,dt); const dx = pr.tx-pr.x, dz = pr.tz-pr.z; pr.x += dx*k; pr.y += (pr.ty-pr.y)*k; pr.z += dz*k; let dy = pr.tyaw-pr.yaw; dy = Math.atan2(Math.sin(dy),Math.cos(dy)); pr.yaw += dy*k; pr.g.position.set(pr.x,pr.y,pr.z); pr.g.rotation.y = pr.yaw; const sp = Math.hypot(dx,dz)*6; pr.walk += dt*Math.min(sp,7)*1.7; animChar(pr.P, t, { walk:pr.walk, speed:sp, sit:pr.riding }); });
-  if (myRef){ presT += dt; if (presT > 0.12){ presT = 0; const data = state==='play' ? { x:+P.x.toFixed(2), y:+P.y.toFixed(2), z:+P.z.toFixed(2), yaw:+P.yaw.toFixed(2), i:islandIdx, hd:save.eq.hoodie, cp:save.eq.cap, gl:!!save.eq.glasses, bp:!!save.eq.backpack, n:save.name||'Player', r:riding?1:0, lv:playerLevel() } : { n:save.name||'Player', i:-1 }; const key = JSON.stringify(data); if (key !== lastSent || Math.random() < 0.05){ lastSent = key; data.t = firebase.database.ServerValue.TIMESTAMP; myRef.set(data).catch(() => {}); } } } }
+  if (myRef){ presT += dt; if (presT > 0.12){ presT = 0; const data = state==='play' ? { x:+P.x.toFixed(2), y:+P.y.toFixed(2), z:+P.z.toFixed(2), yaw:+P.yaw.toFixed(2), i:islandIdx, hd:save.eq.hoodie, cp:save.eq.cap, gl:!!save.eq.glasses, bp:!!save.eq.backpack, n:save.name||'Player', r:riding?1:0, lv:playerLevel(), say: mySay?mySay.m:null, sayT: mySay?mySay.t:null, v: voice?1:0 } : { n:save.name||'Player', i:-1, say: mySay?mySay.m:null, sayT: mySay?mySay.t:null, v: voice?1:0 }; const key = JSON.stringify(data); if (key !== lastSent || Math.random() < 0.05){ lastSent = key; data.t = firebase.database.ServerValue.TIMESTAMP; myRef.set(data).catch(() => {}); } } } }
 
 // ---------- update ----------
 let trailT = 0, promptT = '', kartDist = 0, jumpCnt = 0;
@@ -193,7 +194,7 @@ function update(dt){
   if (state !== 'play') return;
   elapsedT += dt;
   if (inputEv.esc){ inputEv.esc = false; if (dialog) closeDialog(); else { state = 'pause'; $('ovPause').classList.remove('hide'); return; } }
-  if (keys.KeyQ && !keys._q){ keys._q = true; $('btnQuests').onclick(); } if (!keys.KeyQ) keys._q = false;
+  if (keys.KeyQ && !keys._q){ keys._q = true; $('btnQuests').onclick(); } if (!keys.KeyQ) keys._q = false; if (keys.KeyT && !keys._t){ keys._t = true; keys.KeyT = false; openChat(); } if (!keys.KeyT) keys._t = false;
   if (P.dead > 0){ P.dead -= dt; hero.visible = false; if (P.dead <= 0){ respawn(); hero.visible = true; emit(P.x,P.y+1,P.z,20,{colors:[0x37d67a,0xffffff],speed:4,g:2,life:0.8}); } inputEv.jump = inputEv.action = false; return; }
   hero.visible = true;
   if (dialog){ inputEv.jump = false; if (inputEv.action){ inputEv.action = false; dialogNext(); } animChar(HP, t, { walk:P.walk, speed:0, talk:false }); setPrompt(''); return; }
@@ -276,7 +277,7 @@ function render(dt){
   renderer.render(scene, camera);
 }
 let last = performance.now();
-function loop(){ const now = performance.now(); const dt = Math.min(0.05,(now-last)/1000); last = now; if (state === 'menu') elapsedT += dt; try { update(dt); } catch(e){ console.error(e); } updateParts(dt); try { updatePeers(dt, now/1000); } catch(e){} render(dt); requestAnimationFrame(loop); }
+function loop(){ const now = performance.now(); const dt = Math.min(0.05,(now-last)/1000); last = now; if (state === 'menu') elapsedT += dt; try { update(dt); } catch(e){ console.error(e); } updateParts(dt); try { updatePeers(dt, now/1000); updateBubbles(); } catch(e){} render(dt); requestAnimationFrame(loop); }
 // ---------- boot ----------
 if (!save.gift1){ save.gift1 = true; save.coins = (save.coins||0) + 1000; persist(); setTimeout(() => showMsg('🎁 Gift: +1000 coins!', 3000), 1500); }
 loadIsland(clamp(save.island||0, 0, (save.unlocked||1)-1)); buildHero(); renderIslands(); hud(); P.ground = true; P.y = 0; loop(); if (!save.name) askName();
